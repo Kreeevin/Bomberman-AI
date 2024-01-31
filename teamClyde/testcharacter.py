@@ -6,6 +6,8 @@ from entity import CharacterEntity
 from colorama import Fore, Back
 from world import World
 from priority_queue import PriorityQueue
+import math
+import numpy as np
 
 class TestCharacter(CharacterEntity):
     
@@ -60,6 +62,18 @@ class TestCharacter(CharacterEntity):
         
         return True
 
+    def neighbors_of_4(self, wrld,  pos: tuple[int, int]):
+        # init neighbor array
+        neighbors = []
+        if self.is_cell_walkable(wrld, (pos[0]-1, pos[1])):
+            neighbors.append((pos[0]-1, pos[1]))
+        if self.is_cell_walkable(wrld, (pos[0]+1, pos[1])):
+            neighbors.append((pos[0]+1, pos[1]))
+        if self.is_cell_walkable(wrld, (pos[0], pos[1]-1)):
+            neighbors.append((pos[0], pos[1]-1))
+        if self.is_cell_walkable(wrld, (pos[0], pos[1]+1)):
+            neighbors.append((pos[0], pos[1]+1))
+        return neighbors
 
     def neighbors_of_8(self, wrld,  pos: tuple[int, int]):
         # init neighbor array
@@ -113,7 +127,7 @@ class TestCharacter(CharacterEntity):
                 # Once we've hit the goal, reconstruct the path and then return it
                 return self.reconstructPath(explored,start,goal)
             
-            neighbors=self.neighbors_of_8(wrld, cords)
+            neighbors=self.neighbors_of_4(wrld, cords)
             
             for i in range(len(neighbors)):
                 neighbor=neighbors[i]
@@ -154,13 +168,29 @@ class TestCharacter(CharacterEntity):
         return path
 
 # write depth [X] minimax, evaluate goodness using a* distance
-    def nodeIsTerminal():
+    def nodeIsTerminal(self, node: World):
         
         pass
+
+    def maxValue(self, node, depth):
+        if self.nodeIsTerminal(node): 
+            return len(self.a_star(node, node.characters[0], node.exitcell))
+
+        val = float('-inf')
+
+        playerActions = [(-1,0), (0, -1), (1, 0), (0, 1)]
+
+        for a in playerActions:# TODO: make list of actions
+            #TODO: change character's dx and dy based on action
+            val = max(val, minValue(result(node,a))) # TODO; wtf is result
+                    
+        pass
+
+    def minValue(self, node, depth):
+        pass
     
-    def minimaxDecision(max: bool, node: World) -> tuple[int, int]:
-        if nodeIsTerminal():
-            pass
+    def minimax(self, max: bool, node: World, depth: int) -> tuple[int, int]:
+        return (0,0)
         
         
         
