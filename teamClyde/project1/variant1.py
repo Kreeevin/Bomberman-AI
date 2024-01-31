@@ -1,13 +1,13 @@
 # This is necessary to find the main code
 import sys
-sys.path.insert(0, '../../bomberman')
+sys.path.insert(0, '../../Bomberman')
 sys.path.insert(1, '..')
 
 # Import necessary stuff
 from game import Game
 
 # TODO This is your code!
-sys.path.insert(1, '../teamNN')
+sys.path.insert(1, '../teamClyde')
 
 # Uncomment this if you want the empty test character
 #from testcharacter import TestCharacter
@@ -28,7 +28,7 @@ g = Game.fromfile('map.txt')
 
 # Uncomment this if you want the interactive character
 g.add_character(InteractiveCharacter("me", # name
-                                     "C",  # avatar
+                                     "🚶",  # avatar
                                      0, 0  # position
 ))
 
