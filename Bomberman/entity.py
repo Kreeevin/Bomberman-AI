@@ -79,7 +79,7 @@ class MovableEntity(PositionalEntity):
     def __ne__(self, other):
         return not(self == other)
 
-################
+################rospy.loginfo
 # Timed entity #
 ################
 
