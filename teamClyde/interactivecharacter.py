@@ -27,3 +27,4 @@ class InteractiveCharacter(CharacterEntity):
         self.move(dx, dy)
         if bomb:
             self.place_bomb()
+

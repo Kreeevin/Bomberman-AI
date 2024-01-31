@@ -1,6 +1,6 @@
 # This is necessary to find the main code
 import sys
-sys.path.insert(0, '../../bomberman')
+sys.path.insert(0, '../../Bomberman')
 sys.path.insert(1, '..')
 
 # Import necessary stuff
@@ -10,7 +10,7 @@ from monsters.stupid_monster import StupidMonster
 from monsters.selfpreserving_monster import SelfPreservingMonster
 
 # TODO This is your code!
-sys.path.insert(1, '../teamNN')
+sys.path.insert(1, '../teamClyde')
 from testcharacter import TestCharacter
 
 # Create the game
