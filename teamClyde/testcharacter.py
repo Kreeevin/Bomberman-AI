@@ -18,8 +18,11 @@ class TestCharacter(CharacterEntity):
         if wrld.exitcell is not None:
             path = self.a_star(wrld, (self.x, self.y), wrld.exitcell)
             if len(path) > 0:
-                nextNode = path[1]
+                nextNode = path[0]
+                print(f"Next node is {nextNode}")
                 dx, dy = (nextNode[0] - self.x, nextNode[1] - self.y)
+                if wrld.wall_at(self.x+dx, self.y+dy):
+                    print("Tried to walk into a wall")
         else:
             print("No Exit Found")
         # Execute commands
@@ -151,7 +154,15 @@ class TestCharacter(CharacterEntity):
         return path
 
 # write depth [X] minimax, evaluate goodness using a* distance
-    def minimax():
+    def nodeIsTerminal():
+        
+        pass
+    
+    def minimaxDecision(max: bool, node: World) -> tuple[int, int]:
+        if nodeIsTerminal():
+            pass
+        
+        
         
         pass
 
