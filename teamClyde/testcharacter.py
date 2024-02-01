@@ -168,33 +168,49 @@ class TestCharacter(CharacterEntity):
         return path
 
 # write depth [X] minimax, evaluate goodness using a* distance
-    def nodeIsTerminal(self, node: World):
-        
-        pass
+# Writing alpha-beta pruning after this part shouldn't be too too bad
+    
+    def minimax(self, max: bool, world: World, depth: int) -> tuple[int, int]:
+        if max:
+            return self.maxValue(world, depth)
+        else:
+            return self.minValue(world, depth)
 
-    def maxValue(self, node, depth):
-        if self.nodeIsTerminal(node): 
-            return len(self.a_star(node, node.characters[0], node.exitcell))
+    def evaluateState(self, world: World) -> int:
+        return len(self.a_star(world, world.characters[0], world.exitcell))
 
-        val = float('-inf')
+    def maxValue(self, world: World, depth: int) -> int:
+        if depth == 0: 
+            return self.evaluateState(world)
 
         playerActions = [(-1,0), (0, -1), (1, 0), (0, 1)]
-
+        
+        prevBest = None
         for a in playerActions:# TODO: make list of actions
             #TODO: change character's dx and dy based on action
-            val = max(val, minValue(result(node,a))) # TODO; wtf is result
-                    
-        pass
+            newWorld = world.next()
+            val = max(val, self.minValue(newWorld, depth-1))
+            if val > prevBest[1] or prevBest is None:
+                prevBest = (a, val)
 
-    def minValue(self, node, depth):
-        pass
-    
-    def minimax(self, max: bool, node: World, depth: int) -> tuple[int, int]:
-        return (0,0)
-        
-        
-        
-        pass
+    def minValue(self, world: World, depth: int) -> int:
+        if depth == 0: 
+            return self.evaluateState(world)
+
+        # TODO: make list of actions
+        monsterActions = [(-1,0), (0, -1), (1, 0), (0, 1)]
+
+        prevWorst = None
+        # For each monster
+        for m in world.monsters:
+            # Try all actions
+            for a in monsterActions:
+                #TODO: change character's dx and dy based on action
+                newWorld = world.next()
+                val = self.maxValue(newWorld, depth-1)
+                if val > prevWorst[1] or prevWorst is None:
+                    prevWorst = (a, val)
+
 
 # [MAYBE] write markov decision processes (he hasn't finished teaching this so maybe not)
    
