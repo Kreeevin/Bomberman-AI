@@ -179,7 +179,7 @@ class TestCharacter(CharacterEntity):
     def evaluateState(self, world: World) -> int:
         return len(self.a_star(world, world.characters[0], world.exitcell))
 
-    def maxValue(self, world: World, depth: int) -> int:
+    def maxValue(self, world: World, depth: int) -> tuple[int,int]:
         if depth == 0: 
             return self.evaluateState(world)
 
@@ -192,8 +192,10 @@ class TestCharacter(CharacterEntity):
             val = max(val, self.minValue(newWorld, depth-1))
             if val > prevBest[1] or prevBest is None:
                 prevBest = (a, val)
+        
+        return prevBest
 
-    def minValue(self, world: World, depth: int) -> int:
+    def minValue(self, world: World, depth: int) -> tuple[int,int]:
         if depth == 0: 
             return self.evaluateState(world)
 
@@ -210,6 +212,8 @@ class TestCharacter(CharacterEntity):
                 val = self.maxValue(newWorld, depth-1)
                 if val > prevWorst[1] or prevWorst is None:
                     prevWorst = (a, val)
+        
+        return prevWorst
 
 
 # [MAYBE] write markov decision processes (he hasn't finished teaching this so maybe not)
