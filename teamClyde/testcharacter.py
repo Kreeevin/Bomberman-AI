@@ -18,19 +18,26 @@ class TestCharacter(CharacterEntity):
         # Handle input
         ### this is us
         if wrld.exitcell is not None:
-            path = self.a_star(wrld, (self.x, self.y), wrld.exitcell)
-            if len(path) > 0:
-                nextNode = path[0]
-                print(f"Next node is {nextNode}")
-                dx, dy = (nextNode[0] - self.x, nextNode[1] - self.y)
-                if wrld.wall_at(self.x+dx, self.y+dy):
-                    print("Tried to walk into a wall")
+            #   WORKING CODE FOR SCENARIO 1 - JUST FOLLOWS A*
+            # path = self.a_star(wrld, (self.x, self.y), wrld.exitcell)
+            # if len(path) > 0:
+            #     nextNode = path[0]
+            #     print(f"Next node is {nextNode}")
+            #     dx, dy = (nextNode[0] - self.x, nextNode[1] - self.y)
+            #     if wrld.wall_at(self.x+dx, self.y+dy):
+            #         print("Tried to walk into a wall")
+
+            dx, dy = self.minimax(True, wrld, 0)
+            print(f"Player chose to move ({dx},{dy})")
+            if wrld.wall_at(self.x+dx, self.y+dy):
+                print("Tried to walk into a wall")
         else:
             print("No Exit Found")
         # Execute commands
         self.move(dx, dy)
         if bomb:
             self.place_bomb()
+
 
 # helper methods
     def manhattan_dist(self, a: tuple[int, int], b: tuple[int, int]):
@@ -164,7 +171,7 @@ class TestCharacter(CharacterEntity):
                 # This should never happen given the way the algorithm is implemented
                 print('Could not reconstruct path')
                 return []
-
+        print(f"A* found path of length {len(path)}")
         return path
 
 # write depth [X] minimax, evaluate goodness using a* distance
@@ -172,33 +179,34 @@ class TestCharacter(CharacterEntity):
     
     def minimax(self, max: bool, world: World, depth: int) -> tuple[int, int]:
         if max:
-            return self.maxValue(world, depth)
+            return self.maxValue(world, depth)[0]
         else:
-            return self.minValue(world, depth)
+            return self.minValue(world, depth)[0]
 
-    def evaluateState(self, world: World) -> int:
-        return len(self.a_star(world, world.characters[0], world.exitcell))
+    def evaluateState(self, world: World, newEvents) -> int:
+        me = world.me(self)
+        if me is None:
+            return 30
+        return 30-len(self.a_star(world, (me.x, me.y), world.exitcell))
 
     def maxValue(self, world: World, depth: int) -> tuple[int,int]:
-        if depth == 0: 
-            return self.evaluateState(world)
-
         playerActions = [(-1,0), (0, -1), (1, 0), (0, 1)]
         
         prevBest = None
         for a in playerActions:# TODO: make list of actions
-            #TODO: change character's dx and dy based on action
-            newWorld = world.next()
-            val = max(val, self.minValue(newWorld, depth-1))
-            if val[1] > prevBest[1] or prevBest is None:
+            me = world.me(self)
+            me.move(a[0], a[1])
+            newWorld, newEvents = world.next()
+            if depth != 0:  
+                val = self.minValue(newWorld, depth-1)
+            else:
+                val = (a, self.evaluateState(newWorld, newEvents))
+            if prevBest is None or val[1] > prevBest[1]:
                 prevBest = val
         
         return prevBest
 
     def minValue(self, world: World, depth: int) -> tuple[int,int]:
-        if depth == 0: 
-            return self.evaluateState(world)
-
         # TODO: make list of actions
         monsterActions = [(-1,0), (0, -1), (1, 0), (0, 1)]
 
@@ -208,9 +216,12 @@ class TestCharacter(CharacterEntity):
             # Try all actions
             for a in monsterActions:
                 #TODO: change character's dx and dy based on action
-                newWorld = world.next()
+                newWorld, newEvents = world.next()
+            if depth != 0:  
                 val = self.maxValue(newWorld, depth-1)
-                if val[1] > prevWorst[1] or prevWorst is None:
+            else:
+                val = (a, self.evaluateState(newWorld, newEvents))
+                if prevWorst is None or val[1] < prevWorst[1]:
                     prevWorst = val
         
         return prevWorst
