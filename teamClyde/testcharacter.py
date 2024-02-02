@@ -190,8 +190,8 @@ class TestCharacter(CharacterEntity):
             #TODO: change character's dx and dy based on action
             newWorld = world.next()
             val = max(val, self.minValue(newWorld, depth-1))
-            if val > prevBest[1] or prevBest is None:
-                prevBest = (a, val)
+            if val[1] > prevBest[1] or prevBest is None:
+                prevBest = val
         
         return prevBest
 
@@ -210,8 +210,8 @@ class TestCharacter(CharacterEntity):
                 #TODO: change character's dx and dy based on action
                 newWorld = world.next()
                 val = self.maxValue(newWorld, depth-1)
-                if val > prevWorst[1] or prevWorst is None:
-                    prevWorst = (a, val)
+                if val[1] > prevWorst[1] or prevWorst is None:
+                    prevWorst = val
         
         return prevWorst
 
