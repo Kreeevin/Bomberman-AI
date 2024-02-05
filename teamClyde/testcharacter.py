@@ -240,9 +240,7 @@ class TestCharacter(CharacterEntity):
         # Compare position to wavefront for distance evaluation to exit
         distToExit = 0.75*self.wavefront[(me.x, me.y)]
         if distToExit is None:
-            distToExit = 0
-            # for now we won't have anything here
-            discoveryNeeded = 0
+            distToExit = self.euclidean_dist((me.x, me.y), world.exitcell)
         
         # find dist to closest monster
         closestDist = None
