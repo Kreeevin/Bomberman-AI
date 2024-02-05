@@ -38,7 +38,7 @@ class TestCharacter(CharacterEntity):
             #     if wrld.wall_at(self.x+dx, self.y+dy):
             #         print("Tried to walk into a wall")
 
-            dx, dy = self.minimax(True, wrld, 3)
+            dx, dy = self.minimax(True, wrld, 5)
             debug(f"Player chose to move ({dx},{dy})")
             if wrld.wall_at(self.x+dx, self.y+dy):
                 debug("Player tried to walk into a wall")
