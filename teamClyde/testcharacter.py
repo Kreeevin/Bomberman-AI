@@ -8,8 +8,20 @@ from world import World
 from priority_queue import PriorityQueue
 import math
 import numpy as np
+from events import Event
+
+DEBUG = False
+EIGHT_MOVEMENT = [(-1,-1), (-1, 0), (-1, 1),
+                  (0, -1),           (0, 1),
+                  (1, -1),  (1, 0),  (1, 1)]
+
+def debug(str):
+    if DEBUG:
+        print(str)
 
 class TestCharacter(CharacterEntity):
+
+
     
     def do(self, wrld):
         # Commands
@@ -27,10 +39,10 @@ class TestCharacter(CharacterEntity):
             #     if wrld.wall_at(self.x+dx, self.y+dy):
             #         print("Tried to walk into a wall")
 
-            dx, dy = self.minimax(True, wrld, 0)
-            print(f"Player chose to move ({dx},{dy})")
+            dx, dy = self.minimax(True, wrld, 3)
+            debug(f"Player chose to move ({dx},{dy})")
             if wrld.wall_at(self.x+dx, self.y+dy):
-                print("Tried to walk into a wall")
+                debug("Player tried to walk into a wall")
         else:
             print("No Exit Found")
         # Execute commands
@@ -38,18 +50,15 @@ class TestCharacter(CharacterEntity):
         if bomb:
             self.place_bomb()
 
-
 # helper methods
     def manhattan_dist(self, a: tuple[int, int], b: tuple[int, int]):
         return a[0] + b[0] + a[1] + b[1]
 
     def euclidean_dist(self, a: tuple[int, int], b: tuple[int, int]):
-        return ((a[0]+b[0])**2 + (a[1]+b[1])**2)**(1/2)
+        return ((a[0]-b[0])**2 + (a[1]-b[1])**2)**(1/2)
         
     def is_cell_occupied(self, wrld: World, c: tuple[int, int]):
-        return (wrld.wall_at(c[0], c[1]) or 
-                wrld.monsters_at(c[0], c[1]) or 
-                wrld.explosion_at(c[0], c[1]))
+        return wrld.wall_at(c[0], c[1])
 
     def is_cell_walkable(self, wrld: World, c: tuple[int, int],):
         # init variables
@@ -107,7 +116,7 @@ class TestCharacter(CharacterEntity):
         :param goal [int]           The target grid location to pathfind to.
         :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
         """
-        print("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
+        # print("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
 
         # Check if start and goal are walkable
         if(not self.is_cell_walkable(wrld, start)):
@@ -134,7 +143,7 @@ class TestCharacter(CharacterEntity):
                 # Once we've hit the goal, reconstruct the path and then return it
                 return self.reconstructPath(explored,start,goal)
             
-            neighbors=self.neighbors_of_4(wrld, cords)
+            neighbors=self.neighbors_of_8(wrld, cords)
             
             for i in range(len(neighbors)):
                 neighbor=neighbors[i]
@@ -143,7 +152,7 @@ class TestCharacter(CharacterEntity):
                     q.put((neighbor,cords,g+1),f)
         
         # this only happens if no exit can be fond, queue runs out
-        print('Could not reach goal')
+        debug('Could not reach goal')
         
         return []
 
@@ -171,7 +180,7 @@ class TestCharacter(CharacterEntity):
                 # This should never happen given the way the algorithm is implemented
                 print('Could not reconstruct path')
                 return []
-        print(f"A* found path of length {len(path)}")
+        # debug(f"A* found path of length {len(path)}")
         return path
 
 # write depth [X] minimax, evaluate goodness using a* distance
@@ -183,49 +192,113 @@ class TestCharacter(CharacterEntity):
         else:
             return self.minValue(world, depth)[0]
 
-    def evaluateState(self, world: World, newEvents) -> int:
+    def evaluateState(self, world: World, newEvents: list[Event]) -> int:
+        
+        eventReward = 0
+        for event in newEvents:
+            if event.tpe == Event.BOMB_HIT_CHARACTER:
+                eventReward -= float("-inf")
+            if event.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
+                eventReward -= float("-inf")
+            if event.tpe == Event.CHARACTER_FOUND_EXIT:
+                eventReward += 100
+            if event.tpe == Event.BOMB_HIT_WALL:
+                eventReward += 10
+            if event.tpe == Event.BOMB_HIT_MONSTER:
+                eventReward += 50
+
         me = world.me(self)
+
         if me is None:
-            return 30
-        return 30-len(self.a_star(world, (me.x, me.y), world.exitcell))
+            # We either won or died, evaluate accordingly
+            return eventReward
+
+        distToExit = len(self.a_star(world, (me.x, me.y), world.exitcell))
+        
+        # find dist to closest monster
+        closestDist = None
+        for mList in world.monsters.values():
+            # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
+            for m in mList:
+                dist = self.euclidean_dist((me.x, me.y), (m.x, m.y))
+                if closestDist is None or dist <= closestDist:
+                    closestDist = dist
+                    
+        if closestDist is None:
+            monsterPenalty = 0
+        else:
+            if closestDist > 4:
+                monsterPenalty = 0
+            else:
+                monsterPenalty = 5 + (5 - closestDist)**2
+                # return distToExit**(abs(5 - closestDist))
+
+        num_available_moves = 0
+
+        for (dx,dy) in EIGHT_MOVEMENT:
+            if self.is_cell_walkable(world, (me.x+dx, me.y+dy)):
+                num_available_moves += 1
+
+        movementReward = num_available_moves/2
+
+        debug(f"Monster Penalty: {monsterPenalty}, Distance to Exit: {distToExit}")
+        return eventReward + movementReward - monsterPenalty - distToExit
 
     def maxValue(self, world: World, depth: int) -> tuple[int,int]:
-        playerActions = [(-1,0), (0, -1), (1, 0), (0, 1)]
-        
+
+        if world.me(self) is None:
+            return ((0,0), float("-inf"))
+            
         prevBest = None
-        for a in playerActions:# TODO: make list of actions
+        # Loop through all player actions
+        for a in EIGHT_MOVEMENT:
+            # Grab current instance of player character
             me = world.me(self)
-            me.move(a[0], a[1])
+            # Perform action
+            me.move(a[0], a[1]) 
+            # Update world
             newWorld, newEvents = world.next()
+            # Either make recursive call or evaluate
             if depth != 0:  
-                val = self.minValue(newWorld, depth-1)
+                val = (a, self.minValue(newWorld, depth-1)[1])
             else:
                 val = (a, self.evaluateState(newWorld, newEvents))
+            # Save best outcome
             if prevBest is None or val[1] > prevBest[1]:
                 prevBest = val
         
         return prevBest
 
     def minValue(self, world: World, depth: int) -> tuple[int,int]:
-        # TODO: make list of actions
-        monsterActions = [(-1,0), (0, -1), (1, 0), (0, 1)]
 
+        # Check if there are any monsters
+        if len(world.monsters.values()) == 0:
+            # If no monsters, just return world value
+            return ((0,0), self.evaluateState(world, []))
+                
         prevWorst = None
         # For each monster
-        for m in world.monsters:
-            # Try all actions
-            for a in monsterActions:
-                #TODO: change character's dx and dy based on action
-                newWorld, newEvents = world.next()
-            if depth != 0:  
-                val = self.maxValue(newWorld, depth-1)
-            else:
-                val = (a, self.evaluateState(newWorld, newEvents))
-                if prevWorst is None or val[1] < prevWorst[1]:
-                    prevWorst = val
+        for mList in world.monsters.values():
+            # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
+            for m in mList:
+                # Try all actions
+                for a in EIGHT_MOVEMENT:
+                    m.move(a[0], a[1])
+                    newWorld, newEvents = world.next()
+                    if depth != 0:  
+                        val = (a, self.maxValue(newWorld, depth-1))
+                    else:
+                        val = (a, self.evaluateState(newWorld, newEvents))
+                        if prevWorst is None or val[1] < prevWorst[1]:
+                            prevWorst = val
         
+        if prevWorst is None:
+            debug("This shouldn't happen!")
+            return ((0,0), self.evaluateState(world, []))
+
         return prevWorst
 
 
-# [MAYBE] write markov decision processes (he hasn't finished teaching this so maybe not)
-   
+# TODO: Alpha-Beta Pruning (Do as group)
+# TODO: Improved evaluate that rewards having escape routes
+# TODO: Add metrics for num loops, time, etc.
