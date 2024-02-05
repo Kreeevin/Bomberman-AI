@@ -20,13 +20,12 @@ def debug(str):
         print(str)
 
 class TestCharacter(CharacterEntity):
-
-
     
     def do(self, wrld):
         # Commands
         dx, dy = 0,0
         bomb = False
+        self.wavefront = self.make_wavefront(wrld, wrld.exitcell)
         # Handle input
         ### this is us
         if wrld.exitcell is not None:
@@ -182,6 +181,31 @@ class TestCharacter(CharacterEntity):
                 return []
         # debug(f"A* found path of length {len(path)}")
         return path
+    
+    def make_wavefront(self, wrld, exitcell):
+        if exitcell is None or exitcell == []:
+            return {exitcell: 0}
+
+        q = PriorityQueue()
+
+        # dictionary of all the explored points keyed by their coordinates tuple
+        explored={} 
+        q.put((exitcell,0),0)
+
+        while not q.empty():
+            element = q.get()
+            cords = element[0]
+            g = element[1] #cost so far at this element
+            explored[cords] = g
+
+            neighbors=self.neighbors_of_8(wrld, cords)
+            
+            for neighbor in (neighbors):
+                if explored.get(neighbor) is None:
+                    q.put((neighbor,g+1),g+1)
+
+        return explored
+        
 
 # write depth [X] minimax, evaluate goodness using a* distance
 # Writing alpha-beta pruning after this part shouldn't be too too bad
@@ -213,7 +237,12 @@ class TestCharacter(CharacterEntity):
             # We either won or died, evaluate accordingly
             return eventReward
 
-        distToExit = len(self.a_star(world, (me.x, me.y), world.exitcell))
+        # Compare position to wavefront for distance evaluation to exit
+        distToExit = 0.75*self.wavefront[(me.x, me.y)]
+        if distToExit is None:
+            distToExit = 0
+            # for now we won't have anything here
+            discoveryNeeded = 0
         
         # find dist to closest monster
         closestDist = None
@@ -227,7 +256,7 @@ class TestCharacter(CharacterEntity):
         if closestDist is None:
             monsterPenalty = 0
         else:
-            if closestDist > 4:
+            if closestDist > 3:
                 monsterPenalty = 0
             else:
                 monsterPenalty = 5 + (5 - closestDist)**2
@@ -259,7 +288,7 @@ class TestCharacter(CharacterEntity):
             # Update world
             newWorld, newEvents = world.next()
             # Either make recursive call or evaluate
-            if depth != 0:  
+            if depth != 0 and len(newWorld.monsters.values()) != 0:
                 val = (a, self.minValue(newWorld, depth-1)[1])
             else:
                 val = (a, self.evaluateState(newWorld, newEvents))
