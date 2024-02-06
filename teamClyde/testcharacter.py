@@ -38,7 +38,7 @@ class TestCharacter(CharacterEntity):
             #     if wrld.wall_at(self.x+dx, self.y+dy):
             #         print("Tried to walk into a wall")
 
-            action = self.minimax(True, wrld, 3)
+            action = self.minimax(wrld, 3)
             dx, dy = action[0]
             bomb = action[1]
 
@@ -215,23 +215,22 @@ class TestCharacter(CharacterEntity):
         return explored
         
 
-# write depth [X] minimax, evaluate goodness using a* distance
+# write depth [X] minimax, evaluate goodness using wavefront distance
 # Writing alpha-beta pruning after this part shouldn't be too too bad
     
-    def minimax(self, max: bool, world: World, depth: int) -> tuple[int, int]:
-        if max:
-            return self.maxValue(world, depth)[0]
-        else:
-            return self.minValue(world, depth)[0]
+    def minimax(self, world: World, depth: int) -> tuple[int, int]:
+        action, reward = self.maxValue(world, depth, (float("-inf"), float("inf")))
+        debug(f"Chose action {action}, which should result in a reward of {reward}")
+        return action
 
     def evaluateState(self, world: World, newEvents: list[Event]) -> int:
         
         eventReward = 0
         for event in newEvents:
             if event.tpe == Event.BOMB_HIT_CHARACTER:
-                eventReward -= float("-inf")
+                eventReward += float("-inf")
             if event.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
-                eventReward -= float("-inf")
+                eventReward += float("-inf")
             if event.tpe == Event.CHARACTER_FOUND_EXIT:
                 eventReward += 100
             if event.tpe == Event.BOMB_HIT_WALL:
@@ -261,7 +260,12 @@ class TestCharacter(CharacterEntity):
                 for b in world.bombs.values():
                     distToClosestBomb = self.euclidean_dist((b.x, b.y), (m.x, m.y))
                     if distToClosestBomb < 5:
-                        bombProximityBonus += 50
+                        bombProximityBonus += 10
+                        if (b.x == m.x and abs(b.y - m.y) < world.expl_range or
+                            b.y == m.y and abs(b.x - m.x) < world.expl_range):
+                            if b.timer == 1:
+                                bombProximityBonus += 5
+                            bombProximityBonus += 10
                     else:
                         bombProximityBonus -= 5
 
@@ -276,7 +280,6 @@ class TestCharacter(CharacterEntity):
                 monsterPenalty = 0
             else:
                 monsterPenalty = 5 + (5 - closestDist)**2
-                # return distToExit**(abs(5 - closestDist))
 
         num_available_moves = 0
 
@@ -286,53 +289,74 @@ class TestCharacter(CharacterEntity):
 
         movementReward = num_available_moves/2
 
-        # debug(f"Monster Penalty: {monsterPenalty}, Distance to Exit: {distToExit}")
         return eventReward + movementReward - monsterPenalty - distToExit + bombProximityBonus
 
-    def maxValue(self, world: World, depth: int) -> tuple[int,int]:
+    def maxValue(self, world: World, depth: int, alphabeta: tuple) -> tuple[int,int]:
 
         if world.me(self) is None:
             return ((0,0), float("-inf"))
-            
-        prevBest = None
+
+        prevBest = float("-inf")
         # Loop through all player actions
         for (dx,dy) in EIGHT_MOVEMENT:
             for bomb in [False, True]:
+                
+                if alphabeta[0] > alphabeta[1]:
+                    return prevBest
+                
                 # Grab current instance of player character
                 me = world.me(self)
-                # Perform action
+
                 me.move(dx, dy) 
+
+                #if next movement puts char inside wall, that state is ignored
+                if not self.is_cell_walkable(world, me.nextpos()):
+                    continue
+                    
+                # Perform action
                 if bomb:
                     me.place_bomb()
+                else:
+                    me.maybe_place_bomb = False
                 # Update world
                 newWorld, newEvents = world.next()
                 # Either make recursive call or evaluate
                 if depth != 0 and len(newWorld.monsters.values()) != 0:
-                    val = (((dx,dy),bomb), self.minValue(newWorld, depth)[1])
+                    val = (((dx,dy),bomb), self.minValue(newWorld, depth, alphabeta)[1])
                 else:
                     val = (((dx,dy),bomb), self.evaluateState(newWorld, newEvents))
                 # Save best outcome
                 if prevBest is None or val[1] > prevBest[1]:
+                    # Update alpha-beta value
+                    alphabeta = (alphabeta[0], val[1])
                     prevBest = val
         
         return prevBest
 
-    def minValue(self, world: World, depth: int) -> tuple[int,int]:
+    def minValue(self, world: World, depth: int, alphabeta: tuple) -> tuple[int,int]:
 
         # This isn't really a min function as much as it is letting the monsters decide 
-        # what they would do because for project 1 they are completely deterministic
+        # what they would do because for project 1 they are random
         
         # For each monster
         for mList in world.monsters.values():
             # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
             for m in mList:
                 m.do(world)
+        # if alphabeta[0] > alphabeta[1]:
+        #     return prevBest
         
+
         newWorld, newEvents = world.next()
 
-        return self.maxValue(newWorld, depth-1)
+        evaluation = self.maxValue(newWorld, depth-1, alphabeta)
+        # alphabeta = (val[0], alphabeta[1])
+
+        return evaluation
 
 
 # TODO: Alpha-Beta Pruning (Do as group)
+
 # TODO: Improved evaluate that rewards having escape routes
+
 # TODO: Add metrics for num loops, time, etc.
