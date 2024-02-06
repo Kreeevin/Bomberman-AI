@@ -10,7 +10,7 @@ import math
 import numpy as np
 from events import Event
 
-DEBUG = False
+DEBUG = True
 EIGHT_MOVEMENT = [(-1,-1), (-1, 0), (-1, 1),
                   (0, -1),           (0, 1),
                   (1, -1),  (1, 0),  (1, 1)]
@@ -45,7 +45,7 @@ class TestCharacter(CharacterEntity):
             # Just in case something is buggy
             self.maybe_place_bomb = False
 
-            debug(f"Player chose to move ({dx},{dy})")
+            debug(f"Player chose to move ({dx},{dy}). Tried to place bomb: {bomb}")
             if wrld.wall_at(self.x+dx, self.y+dy):
                 debug("Player tried to walk into a wall")
         else:
@@ -261,7 +261,9 @@ class TestCharacter(CharacterEntity):
                 for b in world.bombs.values():
                     distToClosestBomb = self.euclidean_dist((b.x, b.y), (m.x, m.y))
                     if distToClosestBomb < 5:
-                        bombProximityBonus += 5
+                        bombProximityBonus += 50
+                    else:
+                        bombProximityBonus -= 5
 
                 dist = self.euclidean_dist((me.x, me.y), (m.x, m.y))
                 if closestDist is None or dist <= closestDist:
@@ -284,7 +286,7 @@ class TestCharacter(CharacterEntity):
 
         movementReward = num_available_moves/2
 
-        debug(f"Monster Penalty: {monsterPenalty}, Distance to Exit: {distToExit}")
+        # debug(f"Monster Penalty: {monsterPenalty}, Distance to Exit: {distToExit}")
         return eventReward + movementReward - monsterPenalty - distToExit + bombProximityBonus
 
     def maxValue(self, world: World, depth: int) -> tuple[int,int]:
@@ -295,7 +297,7 @@ class TestCharacter(CharacterEntity):
         prevBest = None
         # Loop through all player actions
         for (dx,dy) in EIGHT_MOVEMENT:
-            for bomb in [True, False]:
+            for bomb in [False, True]:
                 # Grab current instance of player character
                 me = world.me(self)
                 # Perform action
