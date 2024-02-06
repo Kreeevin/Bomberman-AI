@@ -38,7 +38,13 @@ class TestCharacter(CharacterEntity):
             #     if wrld.wall_at(self.x+dx, self.y+dy):
             #         print("Tried to walk into a wall")
 
-            dx, dy = self.minimax(True, wrld, 5)
+            action = self.minimax(True, wrld, 3)
+            dx, dy = action[0]
+            bomb = action[1]
+
+            # Just in case something is buggy
+            self.maybe_place_bomb = False
+
             debug(f"Player chose to move ({dx},{dy})")
             if wrld.wall_at(self.x+dx, self.y+dy):
                 debug("Player tried to walk into a wall")
@@ -59,7 +65,9 @@ class TestCharacter(CharacterEntity):
     def is_cell_occupied(self, wrld: World, c: tuple[int, int]):
         return wrld.wall_at(c[0], c[1])
 
-    def is_cell_walkable(self, wrld: World, c: tuple[int, int],):
+    def is_cell_walkable(self, wrld: World, c: tuple[int, int], me: CharacterEntity = None):
+        if me is None:
+            me = self
         # init variables
 
         width = wrld.width()
@@ -72,8 +80,8 @@ class TestCharacter(CharacterEntity):
         if self.is_cell_occupied(wrld, c):
             return False
 
-        if wrld.bomb_at(x, y) and not (x == self.x and y == self.y): # bomb we did not just place down
-            return False
+        # if wrld.bomb_at(x, y) and not (x == me.x and y == me.y): # bomb we did not just place down
+        #     return False
         
         return True
 
@@ -238,15 +246,23 @@ class TestCharacter(CharacterEntity):
             return eventReward
 
         # Compare position to wavefront for distance evaluation to exit
-        distToExit = 0.75*self.wavefront[(me.x, me.y)]
-        if distToExit is None:
+        try:
+            distToExit = 0.75*self.wavefront[(me.x, me.y)]
+        except KeyError:
             distToExit = self.euclidean_dist((me.x, me.y), world.exitcell)
         
         # find dist to closest monster
         closestDist = None
+        bombProximityBonus = 0
         for mList in world.monsters.values():
             # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
             for m in mList:
+
+                for b in world.bombs.values():
+                    distToClosestBomb = self.euclidean_dist((b.x, b.y), (m.x, m.y))
+                    if distToClosestBomb < 5:
+                        bombProximityBonus += 5
+
                 dist = self.euclidean_dist((me.x, me.y), (m.x, m.y))
                 if closestDist is None or dist <= closestDist:
                     closestDist = dist
@@ -254,7 +270,7 @@ class TestCharacter(CharacterEntity):
         if closestDist is None:
             monsterPenalty = 0
         else:
-            if closestDist > 3:
+            if closestDist > 2.5:
                 monsterPenalty = 0
             else:
                 monsterPenalty = 5 + (5 - closestDist)**2
@@ -269,7 +285,7 @@ class TestCharacter(CharacterEntity):
         movementReward = num_available_moves/2
 
         debug(f"Monster Penalty: {monsterPenalty}, Distance to Exit: {distToExit}")
-        return eventReward + movementReward - monsterPenalty - distToExit
+        return eventReward + movementReward - monsterPenalty - distToExit + bombProximityBonus
 
     def maxValue(self, world: World, depth: int) -> tuple[int,int]:
 
@@ -278,52 +294,41 @@ class TestCharacter(CharacterEntity):
             
         prevBest = None
         # Loop through all player actions
-        for a in EIGHT_MOVEMENT:
-            # Grab current instance of player character
-            me = world.me(self)
-            # Perform action
-            me.move(a[0], a[1]) 
-            # Update world
-            newWorld, newEvents = world.next()
-            # Either make recursive call or evaluate
-            if depth != 0 and len(newWorld.monsters.values()) != 0:
-                val = (a, self.minValue(newWorld, depth-1)[1])
-            else:
-                val = (a, self.evaluateState(newWorld, newEvents))
-            # Save best outcome
-            if prevBest is None or val[1] > prevBest[1]:
-                prevBest = val
+        for (dx,dy) in EIGHT_MOVEMENT:
+            for bomb in [True, False]:
+                # Grab current instance of player character
+                me = world.me(self)
+                # Perform action
+                me.move(dx, dy) 
+                if bomb:
+                    me.place_bomb()
+                # Update world
+                newWorld, newEvents = world.next()
+                # Either make recursive call or evaluate
+                if depth != 0 and len(newWorld.monsters.values()) != 0:
+                    val = (((dx,dy),bomb), self.minValue(newWorld, depth)[1])
+                else:
+                    val = (((dx,dy),bomb), self.evaluateState(newWorld, newEvents))
+                # Save best outcome
+                if prevBest is None or val[1] > prevBest[1]:
+                    prevBest = val
         
         return prevBest
 
     def minValue(self, world: World, depth: int) -> tuple[int,int]:
 
-        # Check if there are any monsters
-        if len(world.monsters.values()) == 0:
-            # If no monsters, just return world value
-            return ((0,0), self.evaluateState(world, []))
-                
-        prevWorst = None
+        # This isn't really a min function as much as it is letting the monsters decide 
+        # what they would do because for project 1 they are completely deterministic
+        
         # For each monster
         for mList in world.monsters.values():
             # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
             for m in mList:
-                # Try all actions
-                for a in EIGHT_MOVEMENT:
-                    m.move(a[0], a[1])
-                    newWorld, newEvents = world.next()
-                    if depth != 0:  
-                        val = (a, self.maxValue(newWorld, depth-1))
-                    else:
-                        val = (a, self.evaluateState(newWorld, newEvents))
-                        if prevWorst is None or val[1] < prevWorst[1]:
-                            prevWorst = val
+                m.do(world)
         
-        if prevWorst is None:
-            debug("This shouldn't happen!")
-            return ((0,0), self.evaluateState(world, []))
+        newWorld, newEvents = world.next()
 
-        return prevWorst
+        return self.maxValue(newWorld, depth-1)
 
 
 # TODO: Alpha-Beta Pruning (Do as group)
