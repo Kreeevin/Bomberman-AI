@@ -372,6 +372,50 @@ class TestCharacter(CharacterEntity):
 
 # TODO: Alpha-Beta Pruning (Do as group)
 
+# functions:
+
+def maxValueAB(state: World, alphabeta: tuple): # returns a utility value
+    if terminalTest(state): 
+        return # utility(state)
+        pass 
+
+    v = float("-inf")
+    for a in actions(state):
+        v = max(v, minValueAB(result(state, actions), alphabeta[0], alphabeta[1]))
+
+        if v >= alphabeta[1]: return v
+        alphabeta[0] = max(alphabeta[0], v)
+        pass
+
+    return v
+
+    pass
+
+def minValueAB(state: World, alphabeta: tuple): # returns a utility value
+    if terminalTest(state): 
+        return # utility(state)
+        pass 
+
+    v = float("inf")
+    for a in actions(state):
+        v = min(v, maxValueAB(result(state, actions), alphabeta[0], alphabeta[1]))
+
+        if v <= alphabeta[0]: return v
+        alphabeta[1] = max(alphabeta[1], v)
+        pass
+
+    return v
+
+    pass
+
+# terminal_test determines if a state ends the gane or not
+#does character die? no? great you pass
+
+def expectimax_AB_pruning(state: World) -> tuple [int, int]: # output is action, check datatype
+    v = maxValueAB(state, float("-inf"), float("inf"))
+    #return the action in Actions(state) with value v
+    pass
+
 # TODO: Improved evaluate that rewards having escape routes
 
 # TODO: Add metrics for num loops, time, etc.
