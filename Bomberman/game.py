@@ -105,13 +105,21 @@ class Game:
         self.display_gui()
         self.draw()
         step()
+        win = False
         while not self.done():
             (self.world, self.events) = self.world.next()
+        
+            for event in self.world.events:
+                if event.tpe == Event.CHARACTER_FOUND_EXIT:
+                        win = True
+            
             self.display_gui()
             self.draw()
             step()
             self.world.next_decisions()
         colorama.deinit()
+        return win
+
 
     ###################
     # Private methods #

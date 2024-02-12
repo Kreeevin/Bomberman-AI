@@ -9,43 +9,59 @@ from priority_queue import PriorityQueue
 import math
 import numpy as np
 from events import Event
-
+from types import MethodType
+from sensed_world import SensedWorld
 from monsters.stupid_monster import StupidMonster
 from monsters.selfpreserving_monster import SelfPreservingMonster
 
 
-EIGHT_MOVEMENT = [(-1,-1), (-1, 0), (-1, 1),
-                  (0, -1),           (0, 1),
-                  (1, -1),  (1, 0),  (1, 1)]
+EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
+                  (-1, 0),           (1, 0),
+                  (-1, 1),  (0, 1),  (1, 1)]
 
 DEBUG = True
+
+decay = 1
 
 def debug(str):
     if DEBUG:
         print(str)
 
 class ResetChar(CharacterEntity):
-    
+
+    def __init__(self, name, avatar, x, y):
+        super().__init__(name, avatar, x, y)
+        self.turncount = 0
+
     def do(self, world):
         # Commands
         dx, dy = 0,0
         bomb = False
-        self.wavefront = self.make_wavefront(world, world.exitcell)
+        self.depth = 3
 
+        self.wavefront = self.make_wavefront(world, world.exitcell)
+        
+        for mList in world.monsters.values():
+            # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
+            for monster in mList:
+                monster.move(0,0)
         me = world.me(self)
         me.move(0, 0)
-        action, utility = self.expectimax(world, 5)
+        action, utility = self.expectimax(world, self.depth)
 
         debug(f"Chose action {action}, which has a utility of {utility}")
 
         if action is not None:
             (dx, dy) = action
+        else:
+            dx = 0
+            dy = -1
 
         # Execute commands
         self.move(dx, dy)
 
         debug(f"New player postion: {self.nextpos()}")
-
+        
         if bomb:
             self.place_bomb()
 
@@ -63,65 +79,94 @@ class ResetChar(CharacterEntity):
 
     def isTerminal(self, world, depth):
         isTerminalState = world.me(self) is None
-        
+        if isTerminalState and depth == self.depth:
+            debug("Player thinks he is already dead")
+        if isTerminalState and depth != 0:
+            debug("Search stopped before full depth")
         return depth <= 0 or isTerminalState
     
     
     def maxNode(self, world, depth):
-        bestMove = None
+        bestMove = []
         me = world.me(self)
         validMoves = self.validMoves(world, me)
-        debug(f"Player Position: {me.x, me.y}, Valid Moves: {validMoves}")
+        # debug(f"Player Position: {me.x, me.y}, Valid Moves: {validMoves}")
         for (dx, dy) in validMoves:
             me.move(dx, dy)
             utility = self.chanceNode(world, depth)
             
-            if bestMove is None or utility > bestMove[1]:
-                bestMove = (dx,dy), utility
+            if bestMove != [] and utility == bestMove[0][1]:
+                bestMove.append(((dx,dy), utility))
 
-        debug(f"Player chose action {bestMove[0]}, which has utility {bestMove[1]}")
-        return bestMove
+            if bestMove == [] or utility > bestMove[0][1]:
+                bestMove = []
+                bestMove.append(((dx,dy), utility))
+
+        # no tiebreaker needed
+        if len(bestMove) == 1:
+            return bestMove[0]
+
+        # a* tiebreaker
+        else:
+            closest = None
+            possibleGoodMoves = []
+            for move in bestMove:
+                possibleGoodMoves.append(move[0])
+                me.move(*move[0])
+                dist = self.a_star(world, me.nextpos(), world.exitcell)
+                if closest is None or dist < closest[1]:
+                    closest = move, dist
+                
+            if depth == self.depth:
+                debug(f"Chose {closest[0]} out of all equal options: {possibleGoodMoves}")
+            return closest[0]
+                
     
     # Returns chance utility
     def chanceNode(self, world, depth):
         # For each monster
         utility = 0
         numMonsters = 0
-        for [monster] in world.monsters.values():
+        for mList in world.monsters.values():
+            # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
+            for monster in mList:
             
-            numMonsters += 1
-            
-            # Check what type of monster            
-            isRandom = False
-            
-            if type(monster) == SelfPreservingMonster:
-                if monster.must_change_direction(world):
+                numMonsters += 1
+                
+                # Check what type of monster            
+                isRandom = False
+                
+                if type(monster) == SelfPreservingMonster:
+                    if monster.must_change_direction(world):
+                        isRandom = True
+                elif type(monster) == StupidMonster:
                     isRandom = True
-            elif type(monster) == StupidMonster:
-                isRandom = True
-            
-            # if self preserving, check if next step is random
-            # if not random, perform next step
-            # if random monster or random step, perform chance node behavior
-            if isRandom:
-                # chance node behavior   
+                
+                # if self preserving, check if next step is random
                 # if not random, perform next step
-                validMoves = self.validMoves(world, monster)
-                for (dx, dy) in validMoves:
-                    monster.move(dx, dy)
+                # if random monster or random step, perform chance node behavior
+                if isRandom:
+                    # chance node behavior   
+                    # if not random, perform next step
+                    validMoves = self.validMoves(world, monster)
+                    for (dx, dy) in validMoves:
+                        monster.move(dx, dy)
 
-                    _, partialUtility = self.expectimax(world, depth-1)
+                        _, partialUtility = decay * self.expectimax(world, depth-1)
 
-                    utility += partialUtility / len(validMoves)
+                        utility += partialUtility / len(validMoves)
 
-            else:     
-                monster.do(world)
+                else:     
+                    monster.do(world)
 
-                utility += self.expectimax(world, depth-1)[1]
+                    utility += decay * self.expectimax(world, depth-1)[1]
 
-            # debug(f"Monster behavior is Random: {isRandom}, Behavior found has resulting utility: {utility}")
+                # debug(f"Monster behavior is Random: {isRandom}, Behavior found has resulting utility: {utility}")
+        
+        # inverse proportion of current depth
+        futureWeight = 0.5
 
-        return utility / numMonsters
+        return (utility / numMonsters)*futureWeight  + self.expectimax(world, 0)[1]*(1-futureWeight)
 
 
     def validMoves(self, world, entity):
@@ -147,6 +192,8 @@ class ResetChar(CharacterEntity):
         
         return True
 
+
+
     def evaluateState(self, world: World, newEvents: list[Event]) -> int:
         # Use a* distance for distance to monster, use the walls to your advantage
         # Account for if monster is along path to exit
@@ -159,7 +206,7 @@ class ResetChar(CharacterEntity):
             if event.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
                 eventReward += -1000
             if event.tpe == Event.CHARACTER_FOUND_EXIT:
-                eventReward += 690
+                eventReward += 1500
             if event.tpe == Event.BOMB_HIT_WALL:
                 eventReward += 10
             if event.tpe == Event.BOMB_HIT_MONSTER:
@@ -171,11 +218,13 @@ class ResetChar(CharacterEntity):
             # We either won or died, evaluate accordingly
             return eventReward
 
+        euclidDist = self.euclidean_dist((me.x, me.y), world.exitcell)
+
         # Compare position to wavefront for distance evaluation to exit
         try:
             distToExit = self.wavefront[(me.x, me.y)]
         except KeyError:
-            distToExit = self.euclidean_dist((me.x, me.y), world.exitcell)
+            distToExit = euclidDist
         
         # find dist to closest monster
         monsterPenalty = 0
@@ -184,14 +233,24 @@ class ResetChar(CharacterEntity):
             # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
             for m in mList:
                 monsterDistToExit = self.wavefront[(m.x,m.y)]
-                if distToExit - monsterDistToExit < 5:
-                    # Monster is closer to exit than us (or farther by less than 3 moves)
+                if distToExit - monsterDistToExit >= 0 or abs(distToExit - monsterDistToExit) < 2:
+                    # Monster is closer to exit than us (or farther by less than depth moves)
+                    
                     dist = len(self.a_star(world, (me.x, me.y), (m.x, m.y)))
                     
-                    if dist <= 5:
-                        monsterPenalty += 20*(5-dist)
-                
-        return eventReward - monsterPenalty - distToExit
+                    padding = 3
+                    if dist <= padding:
+                        monsterPenalty += 50*((padding+1) - dist)
+                    else:
+                        monsterPenalty += -dist/2
+
+        # if abs(eventReward - monsterPenalty - 2*distToExit - euclidDist - 23) < 0.5:     
+        #     debug(f"utility = {eventReward + movementReward - monsterPenalty - 2*distToExit - euclidDist} || monsterpenalty = {monsterPenalty}  || distToExit = {distToExit} || playerPos = {(me.x, me.y)}")
+        #     pass
+
+        movementReward = len(self.validMoves(world, me))
+
+        return eventReward + movementReward - monsterPenalty - 5*distToExit #- euclidDist
     
     
     def neighbors_of_8(self, wrld, pos: tuple[int, int]):
@@ -209,6 +268,19 @@ class ResetChar(CharacterEntity):
 
         return neighbors
  
+
+    def neighbors_of_4(self, wrld,  pos: tuple[int, int]):
+        # init neighbor array
+        neighbors = []
+        if self.isCellWalkable(wrld, (pos[0]-1, pos[1])):
+            neighbors.append((pos[0]-1, pos[1]))
+        if self.isCellWalkable(wrld, (pos[0]+1, pos[1])):
+            neighbors.append((pos[0]+1, pos[1]))
+        if self.isCellWalkable(wrld, (pos[0], pos[1]-1)):
+            neighbors.append((pos[0], pos[1]-1))
+        if self.isCellWalkable(wrld, (pos[0], pos[1]+1)):
+            neighbors.append((pos[0], pos[1]+1))
+        return neighbors
 
     def a_star(self, wrld: World, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
         """
