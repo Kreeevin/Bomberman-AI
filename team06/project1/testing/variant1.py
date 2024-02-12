@@ -9,7 +9,7 @@ from game import Game
 
 # TODO This is your code!
 sys.path.insert(1, '../team06')
-from reset import ResetChar
+from clyde import Clyde
 
 wins = 0
 num_tries = 20
@@ -20,7 +20,7 @@ for i in range(num_tries):
     g = Game.fromfile('map.txt')
 
     # TODO Add your character
-    g.add_character(ResetChar("me", # name
+    g.add_character(Clyde("me", # name
                                 "C",  # avatar
                                 0, 0  # position
     ))

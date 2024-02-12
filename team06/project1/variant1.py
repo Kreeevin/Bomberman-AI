@@ -14,7 +14,7 @@ sys.path.insert(1, '../team06')
 
 # Uncomment this if you want the interactive character
 from interactivecharacter import InteractiveCharacter
-from testcharacter import TestCharacter
+from clyde import Clyde
 
 # Create the game
 g = Game.fromfile('map.txt')
@@ -22,7 +22,7 @@ g = Game.fromfile('map.txt')
 # TODO Add your character
 
 # Uncomment this if you want the test character
-g.add_character(TestCharacter("me", # name
+g.add_character(Clyde("me", # name
                               "C",  # avatar
                               0, 0  # position
 ))

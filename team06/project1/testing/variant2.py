@@ -10,7 +10,7 @@ from monsters.stupid_monster import StupidMonster
 
 # TODO This is your code!
 sys.path.insert(1, '../team06')
-from reset import ResetChar
+from clyde import Clyde
 
 wins = 0
 num_tries = 20
@@ -23,7 +23,7 @@ for i in range(num_tries):
                                 "S",      # avatar
                                 3, 5,     # position
     ))
-    g.add_character(ResetChar("me", # name
+    g.add_character(Clyde("me", # name
                                 "C",  # avatar
                                 0, 0  # position
     ))

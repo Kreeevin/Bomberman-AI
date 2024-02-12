@@ -10,7 +10,7 @@ from monsters.selfpreserving_monster import SelfPreservingMonster
 
 # TODO This is your code!
 sys.path.insert(1, '../team06')
-from reset import ResetChar
+from clyde import Clyde
 from interactivecharacter import InteractiveCharacter
 
 wins = 0
@@ -27,7 +27,7 @@ for i in range(num_tries):
     ))
 
     # TODO Add your character
-    g.add_character(ResetChar("me", # name
+    g.add_character(Clyde("me", # name
                                 "C",  # avatar
                                 0, 0  # position
     ))

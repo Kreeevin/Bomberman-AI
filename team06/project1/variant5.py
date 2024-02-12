@@ -11,9 +11,8 @@ from monsters.selfpreserving_monster import SelfPreservingMonster
 
 # TODO This is your code!
 sys.path.insert(1, '../team06')
-from testcharacter import TestCharacter
-from reset import ResetChar
-from abusing_bugs import BuggyCharacter
+from clyde import Clyde
+from abusing_bugs import Thanos
 
 # Create the game
 # 123 - wins

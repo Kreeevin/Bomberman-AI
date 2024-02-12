@@ -27,7 +27,7 @@ def debug(str):
     if DEBUG:
         print(str)
 
-class ResetChar(CharacterEntity):
+class Clyde(CharacterEntity):
 
     def __init__(self, name, avatar, x, y):
         super().__init__(name, avatar, x, y)
