@@ -163,6 +163,9 @@ class ResetChar(CharacterEntity):
 
                 # debug(f"Monster behavior is Random: {isRandom}, Behavior found has resulting utility: {utility}")
         
+        if numMonsters == 0:
+            numMonsters = 1
+
         # inverse proportion of current depth
         futureWeight = 0.5
 

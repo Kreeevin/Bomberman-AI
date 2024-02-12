@@ -8,20 +8,26 @@ from world import World
 from priority_queue import PriorityQueue
 import math
 import numpy as np
-from events import Event
 from types import MethodType
 from sensed_world import SensedWorld
-from monsters.stupid_monster import StupidMonster
-from monsters.selfpreserving_monster import SelfPreservingMonster
 from entity import ExplosionEntity
 
 
-EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
-                  (-1, 0),           (1, 0),
-                  (-1, 1),  (0, 1),  (1, 1)]
+"""
+    This is a funny little guy who abuses the fabric of reality in order to win at bomberman
+    Basically python object oriented is incredibly buggy and you can just delete class methods and replace them
+    with whatever you want. I use this to get the real world object instead of the sensed world, which
+    allows me to mess with the world layout, character/monster/bomb/explosion positions, their movement, and more!
 
+    This is technically not a bug (at least not an easily fixable one), but it is most certainly an exploit.
 
-class BuggyCharacter(CharacterEntity):
+    The last one (abra) doesn't even require this exploit, the agent can just modify its own position and force the
+    world to just accept it as it is (since you use the nextpos method to set the position during the next update)
+
+    - Kay Siegall
+"""
+
+class Thanos(CharacterEntity):
 
     def __init__(self, name, avatar, x, y, variant="rocketman"):
         super().__init__(name, avatar, x, y)
@@ -62,7 +68,7 @@ class BuggyCharacter(CharacterEntity):
             if world.wall_at(self.x+dx, self.y+dy):
                 world.grid[self.x+dx][self.y+dy] = False
 
-            self.explosions[self.index(self.x,self.y)] = ExplosionEntity(self.x+dx, self.y+dy, self.expl_duration, self)
+            self.explosions[self.index(self.x,self.y)] = ExplosionEntity(self.x, self.y, 2, self)
 
     def earthbender(self, world):
         # Nah i make the map now
@@ -78,8 +84,9 @@ class BuggyCharacter(CharacterEntity):
             for mList in world.monsters.values():
                 # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
                 for monster in mList:
-                    for (dx,dy) in EIGHT_MOVEMENT:
-                        world.grid[monster.x+dx][monster.y+dy] = True
+                    for dx in [-1, 0, 1]:
+                        for dy in [-1, 0, 1]:
+                            world.grid[monster.x+dx][monster.y+dy] = True
 
         if self.turncount > 1:
             path = self.a_star(world, (self.x, self.y), world.exitcell, ignoreWalls=False)
@@ -98,7 +105,7 @@ class BuggyCharacter(CharacterEntity):
                 # Delete monster's movement
                 for monster in mList:
                     monster.move(0,0)
-                    
+
             path = self.a_star(world, (self.x, self.y), world.exitcell, ignoreWalls=False)
             if len(path) > 0:
                 nextNode = path[0]
@@ -110,8 +117,6 @@ class BuggyCharacter(CharacterEntity):
         self.x, self.y = world.exitcell
         self.x -= 1
         self.move(1,0)
-
-
 
     def a_star(self, wrld: World, start: tuple[int, int], goal: tuple[int, int], ignoreWalls:bool = True) -> list[tuple[int, int]]:
         """
@@ -158,7 +163,7 @@ class BuggyCharacter(CharacterEntity):
                     q.put((neighbor,cords,g+1),f)
         
         # this only happens if no exit can be fond, queue runs out
-        debug('Could not reach goal')
+        print('Could not reach goal')
         
         return []
 
