@@ -11,7 +11,6 @@ from monsters.selfpreserving_monster import SelfPreservingMonster
 # TODO This is your code!
 sys.path.insert(1, '../team06')
 from reset import ResetChar
-from abusing_bugs import BuggyCharacter
 from interactivecharacter import InteractiveCharacter
 
 wins = 0

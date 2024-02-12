@@ -68,7 +68,7 @@ class Thanos(CharacterEntity):
             if world.wall_at(self.x+dx, self.y+dy):
                 world.grid[self.x+dx][self.y+dy] = False
 
-            self.explosions[self.index(self.x,self.y)] = ExplosionEntity(self.x, self.y, 2, self)
+            world.explosions[world.index(self.x,self.y)] = ExplosionEntity(self.x, self.y, 2, self)
 
     def earthbender(self, world):
         # Nah i make the map now
@@ -86,7 +86,8 @@ class Thanos(CharacterEntity):
                 for monster in mList:
                     for dx in [-1, 0, 1]:
                         for dy in [-1, 0, 1]:
-                            world.grid[monster.x+dx][monster.y+dy] = True
+                            if (dx, dy) != (0,0):
+                                world.grid[monster.x+dx][monster.y+dy] = True
 
         if self.turncount > 1:
             path = self.a_star(world, (self.x, self.y), world.exitcell, ignoreWalls=False)
@@ -159,7 +160,7 @@ class Thanos(CharacterEntity):
             for i in range(len(neighbors)):
                 neighbor=neighbors[i]
                 if explored.get(neighbor) is None or explored.get(neighbor)[2] > g + 1:
-                    f = g + 1 + self.euclidean_dist(neighbor,goal)
+                    f = g + 1 + self.euclideanDist(neighbor,goal)
                     q.put((neighbor,cords,g+1),f)
         
         # this only happens if no exit can be fond, queue runs out
