@@ -14,7 +14,7 @@ from clyde import Clyde
 
 wins = 0
 num_tries = 20
-initial_seed = 300
+initial_seed = 680
 winning_seeds = []
 for i in range(num_tries):
     random.seed(initial_seed + i)
