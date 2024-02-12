@@ -13,29 +13,19 @@ sys.path.insert(1, '../team06')
 from clyde import Clyde
 from interactivecharacter import InteractiveCharacter
 
-wins = 0
-num_tries = 20
-initial_seed = 300
-winning_seeds = []
-for i in range(num_tries):
-    random.seed(initial_seed + i)
-    g = Game.fromfile('map.txt')
-    g.add_monster(SelfPreservingMonster("aggressive", # name
-                                        "A",          # avatar
-                                        3, 13,        # position
-                                        2             # detection range
-    ))
+random.seed(123) 
 
-    # TODO Add your character
-    g.add_character(Clyde("me", # name
-                                "C",  # avatar
-                                0, 0  # position
-    ))
-    if g.go(1):
-        wins += 1
-        winning_seeds.append(initial_seed + i)
+g = Game.fromfile('map.txt')
+g.add_monster(SelfPreservingMonster("aggressive", # name
+                                    "A",          # avatar
+                                    3, 13,        # position
+                                    2             # detection range
+))
 
-print(f"Guy won {wins} times out of {num_tries} iterations, winning seeds were: {winning_seeds}")
+# TODO Add your character
+g.add_character(Clyde("me", # name
+                            "C",  # avatar
+                            0, 0  # position
+))
 
-# Run!
-# g.go(1)
+g.go(1)
