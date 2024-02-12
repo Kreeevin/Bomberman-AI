@@ -7,12 +7,11 @@ sys.path.insert(1, '..')
 import random
 from game import Game
 from monsters.selfpreserving_monster import SelfPreservingMonster
+from monsters.stupid_monster import StupidMonster
 
 # TODO This is your code!
 sys.path.insert(1, '../team06')
 from reset import ResetChar
-from abusing_bugs import BuggyCharacter
-from interactivecharacter import InteractiveCharacter
 
 wins = 0
 num_tries = 20
@@ -26,8 +25,10 @@ for i in range(num_tries):
                                         3, 13,        # position
                                         2             # detection range
     ))
-
-    # TODO Add your character
+    g.add_monster(StupidMonster("stupid", # name
+                                "S",      # avatar
+                                3, 5,     # position
+    ))
     g.add_character(ResetChar("me", # name
                                 "C",  # avatar
                                 0, 0  # position

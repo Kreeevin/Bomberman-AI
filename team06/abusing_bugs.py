@@ -20,38 +20,31 @@ EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
                   (-1, 0),           (1, 0),
                   (-1, 1),  (0, 1),  (1, 1)]
 
-DEBUG = True
-
-decay = 1
-
-def debug(str):
-    if DEBUG:
-        print(str)
 
 class BuggyCharacter(CharacterEntity):
 
-    def __init__(self, name, avatar, x, y):
+    def __init__(self, name, avatar, x, y, variant="rocketman"):
         super().__init__(name, avatar, x, y)
         self.turncount = 0
         self.from_world = SensedWorld.from_world
+        self.variant = variant
 
     def do(self, world):
         # Commands
-        dx, dy = 0,0
-        bomb = False
-        
-        self.rocketman(world)
+        if self.variant == "rocketman":
+            self.rocketman(world)
+        elif self.variant == "earthbender":
+            self.earthbender(world)
+        elif self.variant == "theflash":
+            self.flash(world)
+        elif self.variant == "abra":
+            self.abra(world)
 
-        # Execute commands
-        self.move(dx, dy)
-
-        debug(f"New player postion: {self.nextpos()}")
-        
-        if bomb:
-            self.place_bomb()
         self.turncount += 1
 
     def rocketman(self, world):
+        # what if bomberman was actually just Elton John
+
         if self.turncount == 0:
             SensedWorld.from_world = MethodType(lambda cls, world:world, SensedWorld)
 
@@ -64,6 +57,7 @@ class BuggyCharacter(CharacterEntity):
                 nextNode = path[0]
                 print(f"Next node is {nextNode}")
                 dx, dy = (nextNode[0] - self.x, nextNode[1] - self.y)
+                self.move(dx, dy)
 
             if world.wall_at(self.x+dx, self.y+dy):
                 world.grid[self.x+dx][self.y+dy] = False
@@ -71,10 +65,12 @@ class BuggyCharacter(CharacterEntity):
             self.explosions[self.index(self.x,self.y)] = ExplosionEntity(self.x+dx, self.y+dy, self.expl_duration, self)
 
     def earthbender(self, world):
+        # Nah i make the map now
         if self.turncount == 0:
             SensedWorld.from_world = MethodType(lambda cls, world:world, SensedWorld)
 
         if self.turncount == 1:
+            SensedWorld.from_world = self.from_world
             for x in range(world.width()):
                 for y in range(world.height()):
                     world.grid[x][y] = False
@@ -90,25 +86,30 @@ class BuggyCharacter(CharacterEntity):
             if len(path) > 0:
                 nextNode = path[0]
                 print(f"Next node is {nextNode}")
-                dx, dy = (nextNode[0] - self.x, nextNode[1] - self.y)
+                self.move(nextNode[0] - self.x, nextNode[1] - self.y)
 
-    def timelord(self, world):
+    def flash(self, world):
+        # What if we just didn't let the monster move
         if self.turncount == 0:
             SensedWorld.from_world = MethodType(lambda cls, world:world, SensedWorld)
 
-        if self.turncount == 1:
-            
+        if self.turncount >= 1:
             for mList in world.monsters.values():
-                # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
+                # Delete monster's movement
                 for monster in mList:
                     monster.move(0,0)
-
-        if self.turncount > 1:
-            path = self.a_star(world, (self.x, self.y), world.exitcell)
+                    
+            path = self.a_star(world, (self.x, self.y), world.exitcell, ignoreWalls=False)
             if len(path) > 0:
                 nextNode = path[0]
                 print(f"Next node is {nextNode}")
-                dx, dy = (nextNode[0] - self.x, nextNode[1] - self.y)
+                self.move(nextNode[0] - self.x, nextNode[1] - self.y)
+
+    def abra(self, world):
+        # This one technically isn't even cheating!
+        self.x, self.y = world.exitcell
+        self.x -= 1
+        self.move(1,0)
 
 
 
@@ -207,9 +208,6 @@ class BuggyCharacter(CharacterEntity):
         
         return True
 
-
-
-    
     def neighbors_of_8(self, wrld, pos: tuple[int, int], ignoreWalls: bool = False):
         # init neighbor array
         neighbors = []

@@ -11,8 +11,6 @@ from monsters.selfpreserving_monster import SelfPreservingMonster
 # TODO This is your code!
 sys.path.insert(1, '../team06')
 from reset import ResetChar
-from abusing_bugs import BuggyCharacter
-from interactivecharacter import InteractiveCharacter
 
 wins = 0
 num_tries = 20
@@ -38,5 +36,3 @@ for i in range(num_tries):
 
 print(f"Guy won {wins} times out of {num_tries} iterations, winning seeds were: {winning_seeds}")
 
-# Run!
-# g.go(1)

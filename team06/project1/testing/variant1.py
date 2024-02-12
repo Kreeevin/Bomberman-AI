@@ -6,13 +6,10 @@ sys.path.insert(1, '..')
 # Import necessary stuff
 import random
 from game import Game
-from monsters.selfpreserving_monster import SelfPreservingMonster
 
 # TODO This is your code!
 sys.path.insert(1, '../team06')
 from reset import ResetChar
-from abusing_bugs import BuggyCharacter
-from interactivecharacter import InteractiveCharacter
 
 wins = 0
 num_tries = 20
@@ -21,11 +18,6 @@ winning_seeds = []
 for i in range(num_tries):
     random.seed(initial_seed + i)
     g = Game.fromfile('map.txt')
-    g.add_monster(SelfPreservingMonster("aggressive", # name
-                                        "A",          # avatar
-                                        3, 13,        # position
-                                        2             # detection range
-    ))
 
     # TODO Add your character
     g.add_character(ResetChar("me", # name
@@ -38,5 +30,3 @@ for i in range(num_tries):
 
 print(f"Guy won {wins} times out of {num_tries} iterations, winning seeds were: {winning_seeds}")
 
-# Run!
-# g.go(1)

@@ -11,8 +11,6 @@ from monsters.selfpreserving_monster import SelfPreservingMonster
 # TODO This is your code!
 sys.path.insert(1, '../team06')
 from reset import ResetChar
-from abusing_bugs import BuggyCharacter
-from interactivecharacter import InteractiveCharacter
 
 wins = 0
 num_tries = 20
@@ -24,10 +22,8 @@ for i in range(num_tries):
     g.add_monster(SelfPreservingMonster("aggressive", # name
                                         "A",          # avatar
                                         3, 13,        # position
-                                        2             # detection range
+                                        1             # detection range
     ))
-
-    # TODO Add your character
     g.add_character(ResetChar("me", # name
                                 "C",  # avatar
                                 0, 0  # position
