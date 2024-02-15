@@ -52,7 +52,7 @@ class Thanos(CharacterEntity):
         # what if bomberman was actually just Elton John
 
         if self.turncount == 0:
-            SensedWorld.from_world = MethodType(lambda cls, world:world, SensedWorld)
+            SensedWorld.from_world = MethodType(lambda cls, world: world, SensedWorld)
 
         if self.turncount == 1:
             world.monsters = {0:[]}
