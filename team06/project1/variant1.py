@@ -1,5 +1,6 @@
 # This is necessary to find the main code
 import sys
+import 
 sys.path.insert(0, '../../Bomberman')
 sys.path.insert(1, '..')
 
@@ -16,15 +17,14 @@ sys.path.insert(1, '../team06')
 from interactivecharacter import InteractiveCharacter
 from clyde import Clyde
 
-# Create the game
 g = Game.fromfile('map.txt')
 
 # TODO Add your character
 
 # Uncomment this if you want the test character
 g.add_character(Clyde("me", # name
-                              "C",  # avatar
-                              0, 0  # position
+                            "C",  # avatar
+                            0, 0  # position
 ))
 
 # Uncomment this if you want the interactive character

@@ -17,8 +17,8 @@ import random
 import json
 
 featureNames = ["distToExit", "numWallsOnPath", "distToMonster", "typeClosestMonster", "numMonsters", 
-                "canPlaceBomb", "inBombPath", "timeUntilBombExplodes", "nextToExplosion", "bombHitWall", "numMovesAvailable",
-                "bombHitMonster", "bombHitChar", "charKilledByMonster", "charWins"]
+                "canPlaceBomb", "inBombPath", "timeUntilBombExplodes", "nextToExplosion", "bombHitWall", 
+                "numMovesAvailable", "bombHitMonster", "bombHitChar", "charKilledByMonster", "charWins"]
 
 EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
                   (-1, 0),           (1, 0),
@@ -55,12 +55,6 @@ class Clyde(CharacterEntity):
         me = world.me(self)
         me.move(0, 0)
         
-        _, theoreticalEvents = world.next()
-        if (Event.BOMB_HIT_CHARACTER in theoreticalEvents or 
-            Event.CHARACTER_KILLED_BY_MONSTER in theoreticalEvents or 
-            Event.CHARACTER_FOUND_EXIT in theoreticalEvents):
-            self.saveWeights(self.prevWeights)
-
         # if not self.doneLearning:
         action, weights = self.qLearning(world, self.prevWeights)
 
@@ -80,9 +74,21 @@ class Clyde(CharacterEntity):
         self.performAction(world, action)
 
         debug(f"New player postion: {self.nextpos()}\t Was bomb placement attempted: {bomb}")
+
+        theoryland, theoreticalEvents = world.next()
+        theoreticalEvents = list(map(lambda e:e.tpe, theoreticalEvents))
+        print(f"Theoretical Events: {theoreticalEvents}")
+        
+        
+        if (Event.BOMB_HIT_CHARACTER in theoreticalEvents or 
+            Event.CHARACTER_KILLED_BY_MONSTER in theoreticalEvents or 
+            Event.CHARACTER_FOUND_EXIT in theoreticalEvents or 
+            theoryland.explosion_at(*self.nextpos())):
+            self.saveWeights(self.prevWeights)
+            
         
 
-    def executeBestMove(self, world, weights):
+    def bestMove(self, world, weights):
 
         ### AFTER TRAINING, JUST A MAX NODE TO CHOOSE MOVE
 
@@ -143,6 +149,7 @@ class Clyde(CharacterEntity):
         sensedWorld, _ = world.next()
         # Get features of new world
         newFeatures, newReward = self.featuresOfState(sensedWorld)
+        print(newFeatures)
         # Check for features + rewards
         newWeights = self.updateWeights(sensedWorld, newReward, newFeatures, weights)
         # yippee!
@@ -155,7 +162,7 @@ class Clyde(CharacterEntity):
         
         for idx in range(len(weights)):
             # if any weights have changed more than the tolerance, keep training
-            if abs(weights[idx] - self.prevWeights[idx]) > self.tolerance:
+            if abs(weights[idx] - self.prevWeights[idx]) > tolerance:
                 done = False
 
         return done
@@ -177,7 +184,7 @@ class Clyde(CharacterEntity):
         # Get utility of current state after current action
         currentStateVal = self.evaluateState(features, weights)
         # Get utility of the best move next turn, 
-        nextTurnBestMove = self.executeBestMove(newWorld, weights)
+        nextTurnBestMove = self.bestMove(newWorld, weights)
         if nextTurnBestMove is None: nextTurnBestMoveUtility = 0
         else: nextTurnBestMoveUtility = nextTurnBestMove[1]
 
@@ -190,6 +197,70 @@ class Clyde(CharacterEntity):
 
     def policySearch(self, weights, world) -> list[float]:
         pass
+
+    def a_star(self, wrld: World, start: tuple[int, int], goal: tuple[int, int], ignoreWalls:bool = False) -> list[tuple[int, int]]:
+        """
+        Calculates the Optimal path using the A* algorithm.
+        Publishes the list of cells that were added to the original map.
+        :param wrld [World] The world data.
+        :param start [int]           The starting grid location to pathfind from.
+        :param goal [int]           The target grid location to pathfind to.
+        :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
+        """
+        # print("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
+
+        # Check if start and goal are walkable
+        if(not self.isCellWalkable(wrld, start)):
+            print('start blocked')
+            return []
+        elif(not self.isCellWalkable(wrld, goal)):
+            print('goal blocked')
+            return []
+
+        #Priority queue for the algorithm
+        q = PriorityQueue()
+
+        # dictionary of all the explored points keyed by their coordinates tuple
+        explored={} 
+        q.put((start,None,0),self.euclideanDist(start,goal))
+
+        while not q.empty():
+            element = q.get()
+            cords = element[0]
+            g = element[2] #cost so far at this element
+            explored[cords] = element
+
+            if cords == goal:
+                # Once we've hit the goal, reconstruct the path and then return it
+                return self.reconstructPath(explored,start,goal)
+            
+            neighbors=self.neighbors_of_8(wrld, cords, ignoreWalls)
+            
+            for i in range(len(neighbors)):
+                neighbor=neighbors[i]
+                if explored.get(neighbor) is None or explored.get(neighbor)[2] > g + 1:
+                    f = g + 1 + self.euclideanDist(neighbor,goal)
+                    q.put((neighbor,cords,g+1),f)
+        
+        # this only happens if no exit can be fond, queue runs out
+        print('Could not reach goal')
+        
+        return []
+
+    def neighbors_of_8(self, wrld, pos: tuple[int, int], ignoreWalls: bool = False):
+        # init neighbor array
+        neighbors = []
+
+        #loop through neighbors
+        for y_offset in [-1,0,1]: 
+            for x_offset in [-1,0,1]:
+
+                point = (pos[0] + x_offset, pos[1] + y_offset) # calculate the point to check
+
+                if self.isCellWalkable(wrld, point) and point != pos or ignoreWalls: 
+                    neighbors.append(point) #append to return list if walkable
+
+        return neighbors
 
     # calculate list of features
     def featuresOfState(self, world: World) -> tuple[list[int], int]:
@@ -218,13 +289,21 @@ class Clyde(CharacterEntity):
         
 
         me = world.me(self)
+
         if me is not None:
+
+            aStarPath = self.a_star(world, (me.x,me.y), world.exitcell, ignoreWalls=True)
+            for p in aStarPath:
+                if world.wall_at(*p):
+                    numWallsOnPath += 1
+
+            distToExit = len(aStarPath)
             
             for mList in world.monsters.values():
                     # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
                     for monster in mList:
                         
-                        dist = len(self.a_star(world, (me.x, me.y), (monster.x, monster.y)))
+                        dist = len(self.a_star(world, (me.x, me.y), (monster.x, monster.y), ignoreWalls=False))
                             
                         if distToMonster == 0 or dist < distToMonster:
                             distToMonster = dist
@@ -276,7 +355,7 @@ class Clyde(CharacterEntity):
         for event in world.events:
             if event.tpe == Event.BOMB_HIT_CHARACTER:
                 bombHitChar = 1
-                reward -= 1000
+                reward -= 5000
             if event.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
                 charKilledByMonster = 1
                 reward -= 1000
@@ -308,18 +387,20 @@ class Clyde(CharacterEntity):
 
     def saveWeights(self, weights: list, fileName = "weights.json"):
         featureDict = {}
-        with open(fileName) as file:
+        with open(fileName, "w+") as file:
             for index, weight in enumerate(weights):
                 featureDict[featureNames[index]] = weight
             json.dump(featureDict, file)
+            print("Weights saved to file successfully")
     
-    def readWeights(self, fileName = "weights.json"):
+    def readWeights(self, fileName = "weights.json") -> list[float]:
         weights = []
         try:
             with open(fileName) as file:
                 file_weights = json.load(file)
                 for key in featureNames:
                     weights.append(file_weights[key])
+                print(f"Weights successfully read: {weights}")
             return weights
         except:
             return [1]*len(featureNames)
@@ -338,3 +419,32 @@ class Clyde(CharacterEntity):
             return False
         
         return True
+    
+    def euclideanDist(self, a: tuple[int, int], b: tuple[int, int]):
+        return ((a[0]-b[0])**2 + (a[1]-b[1])**2)**(1/2)
+
+    def reconstructPath(self, explored: dict, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:   
+        """
+        A helper function to reconstruct the path from the explored dictionary
+        :param explored [dict] The dictionary of explored nodes
+        :param start [tuple(int, int)] The starting point
+        :param goal [tuple(int, int)] The goal point
+        :return        [list[tuple(int, int)]] The Optimal Path from start to goal.
+        """
+        
+        cords = goal
+        path = []
+       
+        # Loops backwards through the explored dictionary to reconstruct the path
+        while cords != start:
+            
+            element = explored[cords]
+            path = [cords] + path
+            cords = element[1]
+            
+            if cords == None:
+                # This should never happen given the way the algorithm is implemented
+                print('Could not reconstruct path')
+                return []
+        # debug(f"A* found path of length {len(path)}")
+        return path
