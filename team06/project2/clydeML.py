@@ -16,6 +16,12 @@ from monsters.selfpreserving_monster import SelfPreservingMonster
 import random
 import json
 
+# TODO: Normalize features between 0 and 1 - allows for comparing weights later
+# TODO: Separate random vs intelligent monster instead of type of monster
+
+# TODO: Introduce curiousity so sometimes choose the best action
+
+
 featureNames = ["distToExit", "numWallsOnPath", "distToMonster", "typeClosestMonster", "numMonsters", 
                 "canPlaceBomb", "inBombPath", "timeUntilBombExplodes", "nextToExplosion", "bombHitWall", 
                 "numMovesAvailable", "bombHitMonster", "bombHitChar", "charKilledByMonster", "charWins"]
@@ -59,6 +65,7 @@ class Clyde(CharacterEntity):
         action, weights = self.qLearning(world, self.prevWeights)
 
         self.prevWeights = weights
+        
         # else:
 
         #     policySearchThreshold = 20
@@ -149,8 +156,9 @@ class Clyde(CharacterEntity):
         sensedWorld, _ = world.next()
         # Get features of new world
         newFeatures, newReward = self.featuresOfState(sensedWorld)
-        print(newFeatures)
+        print(f"Features: {newFeatures}")
         # Check for features + rewards
+        # sensedWorld.scores[-1] - world.scores[-1]
         newWeights = self.updateWeights(sensedWorld, newReward, newFeatures, weights)
         # yippee!
         return action, newWeights
@@ -185,10 +193,16 @@ class Clyde(CharacterEntity):
         currentStateVal = self.evaluateState(features, weights)
         # Get utility of the best move next turn, 
         nextTurnBestMove = self.bestMove(newWorld, weights)
-        if nextTurnBestMove is None: nextTurnBestMoveUtility = 0
-        else: nextTurnBestMoveUtility = nextTurnBestMove[1]
+
+        if nextTurnBestMove is None: 
+            nextTurnBestMoveUtility = 0
+        else: 
+            nextTurnBestMoveUtility = nextTurnBestMove[1]
 
         delta = reward + self.futureDecay*nextTurnBestMoveUtility - currentStateVal
+
+        print(f"Delta: {delta}, Reward: {reward}, nextTurnBestMove: {nextTurnBestMoveUtility}, CurrentStateVal: {currentStateVal}")
+        print(f"Weights: {weights}")
         # Update weights according to learning factor& delta
         for idx in range(len(weights)):
             weights[idx] += self.learningFactor*delta*features[idx]
@@ -369,7 +383,7 @@ class Clyde(CharacterEntity):
                 bombHitMonster = 1
                 reward += 250
 
-        return ([distToExit, numWallsOnPath, distToMonster, typeClosestMonster, numMonsters, 
+        return ([1/(1+distToExit), numWallsOnPath, distToMonster, typeClosestMonster, numMonsters, 
                 canPlaceBomb, inBombPath, timeUntilBombExplodes, nextToExplosion, bombHitWall, numMovesAvailable,
                 bombHitMonster, bombHitChar, charKilledByMonster, charWins], reward)
 
