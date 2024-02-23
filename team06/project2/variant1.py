@@ -12,7 +12,7 @@ sys.path.insert(1, '../team06')
 from clydeML import Clyde
 
 initial_seed = 200
-num_tries = 1
+num_tries = 1000
 wins = 0
 winning_seeds = []
 for i in range(num_tries):
@@ -25,10 +25,10 @@ for i in range(num_tries):
                                 "C",  # avatar
                                 0, 0  # position
     ))
-    if g.go(0):
+    if g.go(1):
         wins += 1
         winning_seeds.append(initial_seed + i)
 
-    print(f"Guy won {wins} times out of {num_tries} iterations, winning seeds were: {winning_seeds}")
+print(f"Guy won {wins} times out of {num_tries} iterations, winning seeds were: {winning_seeds}")
 
 

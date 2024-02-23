@@ -1,6 +1,6 @@
 # This is necessary to find the main code
 import sys
-import 
+import random
 sys.path.insert(0, '../../Bomberman')
 sys.path.insert(1, '..')
 
@@ -15,28 +15,23 @@ sys.path.insert(1, '../team06')
 
 # Uncomment this if you want the interactive character
 from interactivecharacter import InteractiveCharacter
-from clyde import Clyde
+from clydeML import Clyde
 
-g = Game.fromfile('map.txt')
+wins = 0
+num_tries = 500
+initial_seed = 300
+winning_seeds = []
+for i in range(num_tries):
+    random.seed(initial_seed + i)
+    g = Game.fromfile('map.txt')
 
-# TODO Add your character
+    # TODO Add your character
+    g.add_character(Clyde("me", # name
+                                "C",  # avatar
+                                0, 0  # position
+    ))
+    if g.go(1):
+        wins += 1
+        winning_seeds.append(initial_seed + i)
 
-# Uncomment this if you want the test character
-g.add_character(Clyde("me", # name
-                            "C",  # avatar
-                            0, 0  # position
-))
-
-# Uncomment this if you want the interactive character
-# g.add_character(InteractiveCharacter("me", # name
-#                                      "🚶",  # avatar
-#                                      0, 0  # position
-# ))
-
-# Run!
-
-# Use this if you want to press ENTER to continue at each step
-# g.go(0)
-
-# Use this if you want to proceed automatically
-g.go(1)
+print(f"Guy won {wins} times out of {num_tries} iterations, winning seeds were: {winning_seeds}")
