@@ -32,12 +32,12 @@ class Clyde(CharacterEntity):
     def __init__(self, name, avatar, x, y):
         super().__init__(name, avatar, x, y)
         self.turncount = 0
+        self.depth = 3
 
     def do(self, world):
         # Commands
         dx, dy = 0,0
         bomb = False
-        self.depth = 3
 
         self.wavefront = self.make_wavefront(world, world.exitcell)
         

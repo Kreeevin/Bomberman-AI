@@ -15,6 +15,7 @@ from monsters.stupid_monster import StupidMonster
 from monsters.selfpreserving_monster import SelfPreservingMonster
 import random
 import json
+from clyde import Clyde
 
 # TODO: Normalize features between 0 and 1 - allows for comparing weights later
 # TODO: Separate random vs intelligent monster instead of type of monster
@@ -47,7 +48,6 @@ featureNames = ["distToExit", # Already normalized, 1/(1+dist)
                 "bombHitWall", "bombHitMonster", "bombHitChar", "charKilledByMonster", "charWins"] #Events -- all bools
 
 
-
 EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
                   (-1, 0),           (1, 0),
                   (-1, 1),  (0, 1),  (1, 1)]
@@ -60,14 +60,17 @@ def debug(str):
     if DEBUG:
         print(str)
 
-class Clyde(CharacterEntity):
+class ClydeML(CharacterEntity):
 
-    def __init__(self, name, avatar, x, y, learningFactor = 0.5, futureDecay = 0.9):
+    def __init__(self, name, avatar, x, y, learningFactor = 0.5, futureDecay = 0.5):
         super().__init__(name, avatar, x, y)
         self.turncount = 0
         self.learningFactor = learningFactor
         self.futureDecay = futureDecay
         self.doneLearning = False
+        self.sum_features = [0] * len(featureNames)
+        self.avg_features = [0] * len(featureNames)
+        self.num_samples = 0
         self.prevWeights = self.readWeights()
 
     def do(self, world):
@@ -76,6 +79,7 @@ class Clyde(CharacterEntity):
         if self.turncount == 0:
             # Initialize helpful class variables like self.initial_monster_count or wavefront
             self.initialize_helper_variables(world)
+            self.x, self.y = self.random_non_wall(world)
 
         # Neccessary so that entities don't repeat their previous move if timestep is
         # incremented before their next move is redefined
@@ -123,8 +127,8 @@ class Clyde(CharacterEntity):
             self.performAction(world, (dx, dy))
             
             newWorld, _ = world.next()
-            newFeatures, _ = self.featuresOfState(newWorld)
-            newUtility = self.evaluateState(newFeatures, weights)
+            newFeatures, reward = self.featuresOfState(newWorld)
+            newUtility = self.evaluateStateUtility(newFeatures, weights) + reward
             
             if bestMove is None or newUtility > bestMove[1]:
                 bestMove = ((dx,dy), newUtility)
@@ -133,6 +137,33 @@ class Clyde(CharacterEntity):
             print("Player has no valid move")
 
         return bestMove
+    
+    def curiousMove(self, world, weights):
+
+        ### DURING TRAINING, JUST A MAX NODE TO CHOOSE MOVE THAT IS FARTHEST FROM AVERAGE
+        me = world.me(self)
+        if me is None:
+            return None
+        actions = self.validMoves(world, me) # (0,0) places bomb
+        actions.append((0,0))
+        curiosityMove = None
+
+        for dx, dy in actions:
+            self.performAction(world, (dx, dy))
+            
+            newWorld, _ = world.next()
+            newFeatures, _ = self.featuresOfState(newWorld)
+            newDistToAvgState = self.feature_diff(newFeatures)
+            
+            if curiosityMove is None or newDistToAvgState > curiosityMove[1]:
+                curiosityMove = ((dx,dy), newDistToAvgState)
+        
+        if curiosityMove is None:
+            print("Player has no valid move")
+
+        print(f"Choosing move {curiosityMove[0]}, which is {curiosityMove[1]} away from the average move")
+
+        return curiosityMove
             
     def performAction(self, world : SensedWorld, action):
         me = world.me(self)
@@ -161,22 +192,81 @@ class Clyde(CharacterEntity):
         # Get all legal actions
         actions = self.validMoves(world, world.me(self)) # (0, 0) is place bomb
         actions.append((0,0))
-        # Choose a random move
-        if random.random() < self.trainingDuration/1000:
+
+        # Choose a curious move
+        # action, _ = self.curiousMove(world, weights)
+
+
+        if random.random() < (self.turncount+self.trainingDuration)/1000:
             action, _ = self.bestMove(world, weights)
-        else: action = random.choice(actions)
+            debug("PICKS BEST MOVE")
+        else:
+            non_death_actions = []
+            for (dx,dy) in actions:
+                me = world.me(self)
+                if (dx, dy) == (0,0) and not self.canPlaceBomb(world, me):
+                    continue
+                if world.explosion_at(self.x+dx, self.y+dy):
+                    continue
+                inPath, bomb = self.in_bomb_path(world, me, (dx, dy))
+                if inPath and bomb is not None and bomb.timer < 2:
+                    continue
+                else: non_death_actions.append((dx, dy))
+            if non_death_actions == []:
+                non_death_actions.append((0,0))
+            action = random.choice(non_death_actions)
+            debug("PICKS RANDOM MOVE")
         # Perform random move
         self.performAction(world, action)
         # Increment time step
         sensedWorld, _ = world.next()
         # Get features of new world
         newFeatures, reward = self.featuresOfState(sensedWorld)
-        debug(f"Features: {newFeatures}")
+        
+        # SKILL ISSUE: EXPECTIMAX DOESN'T LIKE WALLS
+
+        # if newFeatures[24] or newFeatures[25] or newFeatures[26]:
+        #     # If the curious move will cause the player to die,
+        #     # Find the optimal move according to expectimax instead
+        #     debug("RUNNING EXPECTIMAX TO TRY AND AVOID DYING")
+        #     newAction, _ = self.maxNode(world, 3)
+        #     if newAction is not None:
+        #         # Perform random move
+        #         self.performAction(world, newAction)
+        #         # Increment time step
+        #         sensedWorld, _ = world.next()
+        #         # Get features of new world
+        #         newFeatures, reward = self.featuresOfState(sensedWorld)
+
+        #         action = newAction
+
+        self.avg_features = self.rolling_average(newFeatures)
+        # debug(f"Features: {newFeatures}")
+        self.debug_features(newFeatures)
         # Check for features + rewards
         newWeights = self.updateWeights(sensedWorld, reward, newFeatures, weights)
         # yippee!
         return action, newWeights
-        
+    
+    def rolling_average(self, features: tuple[float]) -> tuple[float]:
+        avg_features = []
+        self.num_samples += 1
+        for i in range(len(self.sum_features)):
+            self.sum_features[i] += features[i]
+            avg_features.append(self.sum_features[i]/self.num_samples)
+        # debug(f"Average features with {self.num_samples} samples:")
+        # debug(f"{avg_features}")
+        return tuple(avg_features)
+
+    def feature_diff(self, features: tuple[float]) -> float:
+        sum = 0
+        binary_feature_indexes = [2,3,4,5,9,10,11,12,13,14,15,16,17,18,20,22,23,24,25,26]
+        for i in range(len(featureNames)):
+            if i in binary_feature_indexes:
+                continue
+            sum += (self.avg_features[i] - features[i])**2
+        return math.sqrt(sum)
+
     def stopTraining(self, world, weights) -> bool:
         
         tolerance = .01 # TODO tune this real good
@@ -190,7 +280,7 @@ class Clyde(CharacterEntity):
         return done
                 
     
-    def evaluateState(self, features, weights):
+    def evaluateStateUtility(self, features, weights):
         currentUtility = 0
 
         for idx in range(len(weights)):
@@ -204,7 +294,7 @@ class Clyde(CharacterEntity):
     
     def updateWeights(self, newWorld, reward, features, weights):
         # Get utility of current state after current action
-        currentStateVal = self.evaluateState(features, weights)
+        currentStateVal = self.evaluateStateUtility(features, weights)
         # Get utility of the best move next turn, 
         nextTurnBestMove = self.bestMove(newWorld, weights)
 
@@ -215,17 +305,31 @@ class Clyde(CharacterEntity):
             
         delta = reward + self.futureDecay*nextTurnBestMoveUtility - currentStateVal
 
-        debug(f"Delta: {delta}, Reward: {reward}, nextTurnBestMove: {nextTurnBestMoveUtility}, CurrentStateVal: {currentStateVal}")
-        debug(f"Weights: {weights}")
+        debug(f"\nDelta: {delta}, Reward: {reward}, nextTurnBestMove: {nextTurnBestMoveUtility}, CurrentStateVal: {currentStateVal}")
+        debug(f"Weights: {weights}\n")
         # Update weights according to learning factor& delta
         for idx in range(len(weights)):
             weights[idx] += self.learningFactor*delta*features[idx]
+            # Bind weights from -1000 to 1000 
+            # if math.fabs(weights[idx]) > 1000:
+            #     weights[idx] *= 1000/math.fabs(weights[idx])
 
         return weights
 
     def policySearch(self, weights, world) -> list[float]:
         # Decide later if this is actually needed or just a nice to have
         pass
+
+    def in_bomb_path(self, world, entity, action=(0,0)):
+        for bomb in world.bombs.values():
+                # if guy is same x coord as bomb and diff in y coord is <= range
+                if entity.x+action[0] == bomb.x and abs(entity.y+action[1] - bomb.y) <= world.expl_range:
+                    return True, bomb
+                # if guy is same y coord as bomb and diff in x coord is <= range
+                if entity.y+action[1] == bomb.y and abs(entity.x+action[0] - bomb.x) <= world.expl_range:
+                    return True, bomb
+                    
+        return False, None
 
     # calculate list of features
     def featuresOfState(self, world: World) -> tuple[list[int], int]:
@@ -274,15 +378,22 @@ class Clyde(CharacterEntity):
 
             aStarPath = self.a_star(world, (me.x,me.y), world.exitcell, ignoreWalls=True)
             numWallsOnPath = 0
+            self.tiles = {}
             for p in aStarPath:
+                self.set_cell_color(*p, Fore.CYAN+Back.RED)
                 if world.wall_at(*p):
                     numWallsOnPath += 1
-                    
+            
+            freePathFactor = 10
+            if numWallsOnPath == 0:
+                print("FREE PATH TO EXIT - PLEASE FOR FUCKS SAKE PLEASE TAKE IT")
+                freePathFactor = 250
+
             proportionWallsOnPath = numWallsOnPath/len(aStarPath)
 
             normalizedDistToExit = 1/(1+len(aStarPath))
 
-            rewards += (self.initial_dist_to_exit-len(aStarPath))**3
+            rewards += freePathFactor*(self.initial_dist_to_exit-len(aStarPath))**3
 
             exitcell_x = world.exitcell[0]
             exitcell_y = world.exitcell[1]
@@ -294,39 +405,39 @@ class Clyde(CharacterEntity):
 
             distClosest = 0
             for mList in world.monsters.values():
-                    # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
-                    for monster in mList:
-                        numMonsters += 1
-                        dist = len(self.a_star(world, (me.x, me.y), (monster.x, monster.y), ignoreWalls=False))
-                        if type(monster) == SelfPreservingMonster:
-                            
-                            if distToAggressiveMonster == 0 or dist < distToAggressiveMonster:
-                                distToAggressiveMonster = dist
+                # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
+                for monster in mList:
+                    numMonsters += 1
+                    dist = len(self.a_star(world, (me.x, me.y), (monster.x, monster.y), ignoreWalls=False))
+                    if type(monster) == SelfPreservingMonster:
+                        
+                        if distToAggressiveMonster == 0 or dist < distToAggressiveMonster:
+                            distToAggressiveMonster = dist
 
-                            if distClosest == 0 or dist < distClosest:
+                        if distClosest == 0 or dist < distClosest:
 
-                                if monster.x - me.x > 0: dirMonsterPosX = 1
-                                else: dirMonsterPosX = 0
-                                if monster.x - me.x < 0: dirMonsterNegX = 1
-                                else: dirMonsterNegX = 0
-                                if monster.y - me.y > 0: dirMonsterPosX = 1
-                                else: dirMonsterPosX = 0
-                                if monster.y - me.y < 0: dirMonsterNegX = 1
-                                else: dirMonsterNegX = 0
-                            
-                        elif type(monster) == StupidMonster:
-                            if distToRandomMonster == 0 or dist < distToRandomMonster:
-                                    distToRandomMonster = dist
-                            
-                            if distClosest == 0 or dist < distClosest:
-                                if monster.x - me.x > 0: dirMonsterPosX = 1
-                                else: dirMonsterPosX = 0
-                                if monster.x - me.x < 0: dirMonsterNegX = 1
-                                else: dirMonsterNegX = 0
-                                if monster.y - me.y > 0: dirMonsterPosX = 1
-                                else: dirMonsterPosX = 0
-                                if monster.y - me.y < 0: dirMonsterNegX = 1
-                                else: dirMonsterNegX = 0
+                            if monster.x - me.x > 0: dirMonsterPosX = 1
+                            else: dirMonsterPosX = 0
+                            if monster.x - me.x < 0: dirMonsterNegX = 1
+                            else: dirMonsterNegX = 0
+                            if monster.y - me.y > 0: dirMonsterPosX = 1
+                            else: dirMonsterPosX = 0
+                            if monster.y - me.y < 0: dirMonsterNegX = 1
+                            else: dirMonsterNegX = 0
+                        
+                    elif type(monster) == StupidMonster:
+                        if distToRandomMonster == 0 or dist < distToRandomMonster:
+                                distToRandomMonster = dist
+                        
+                        if distClosest == 0 or dist < distClosest:
+                            if monster.x - me.x > 0: dirMonsterPosX = 1
+                            else: dirMonsterPosX = 0
+                            if monster.x - me.x < 0: dirMonsterNegX = 1
+                            else: dirMonsterNegX = 0
+                            if monster.y - me.y > 0: dirMonsterPosX = 1
+                            else: dirMonsterPosX = 0
+                            if monster.y - me.y < 0: dirMonsterNegX = 1
+                            else: dirMonsterNegX = 0
 
             # Normalize Monster Features
             if self.initial_monster_count != 0:
@@ -340,6 +451,7 @@ class Clyde(CharacterEntity):
 
             if not self.canPlaceBomb(world, me):
                 canPlaceBomb = 0
+                
             
             # in path
             closestBomb = None
@@ -349,12 +461,12 @@ class Clyde(CharacterEntity):
                 if me.x == bomb.x and abs(me.y - bomb.y) <= world.expl_range:
                     dangerBombs.append(bomb)
                     inBombPath = 1
-                    rewards -= 50
+                    rewards -= 100
                 # if guy is same y coord as bomb and diff in x coord is <= range
                 if me.y == bomb.y and abs(me.x - bomb.x) <= world.expl_range:
                     dangerBombs.append(bomb)
                     inBombPath = 1
-                    rewards -= 50
+                    rewards -= 100
                 
                 distToBomb = abs(me.x - bomb.x) + abs(me.y - bomb.y)
                 closestDist = -1
@@ -380,6 +492,7 @@ class Clyde(CharacterEntity):
                 #if explosion:
                 if world.explosion_at((me.x + v[0]), (me.y + v[1])):
                     nextToExplosion = 1
+                    rewards -= 50
                     break
 
             # Normalize number of available moves by dividing by the max number
@@ -395,13 +508,15 @@ class Clyde(CharacterEntity):
                 rewards -= 10000
             if event.tpe == Event.CHARACTER_FOUND_EXIT:
                 charWins = 1
-                rewards += 1000
+                rewards += 10000
             if event.tpe == Event.BOMB_HIT_WALL:
                 bombHitWall = 1
                 rewards += 20
             if event.tpe == Event.BOMB_HIT_MONSTER:
                 bombHitMonster = 1
                 rewards += 100
+
+        rewards -= self.turncount
 
         features = [normalizedDistToExit, proportionWallsOnPath, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
                 distToRandomMonster, distToAggressiveMonster, numMonsters, dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY,
@@ -419,33 +534,6 @@ class Clyde(CharacterEntity):
                 validMoves.append((dx, dy))
 
         return validMoves
-
-    # Helpers for reading from / saving weights to a file
-
-    def saveWeights(self, weights: list, fileName = "weights.json"):
-        featureDict = {}
-        with open(fileName, "w+") as file:
-            for index, weight in enumerate(weights):
-                featureDict[featureNames[index]] = weight
-            featureDict["trainingDuration"] = self.trainingDuration + 1 # save how long we have been training
-            json.dump(featureDict, file)
-            print("Weights saved to file successfully")
-    
-
-    def readWeights(self, fileName = "weights.json") -> list[float]:
-        weights = []
-        try:
-            with open(fileName) as file:
-                file_weights = json.load(file)
-                for key in featureNames:
-                    weights.append(file_weights[key])
-                self.trainingDuration = file_weights["trainingDuration"] # get how long we have been training
-                print(f"Weights successfully read: {weights}")
-            return weights
-        except:
-            self.trainingDuration = 0
-            return [1]*len(featureNames)
-
 
     def a_star(self, world: World, start: tuple[int, int], goal: tuple[int, int], ignoreWalls:bool = False) -> list[tuple[int, int]]:
         """
@@ -490,7 +578,7 @@ class Clyde(CharacterEntity):
                 if explored.get(neighbor) is None or explored.get(neighbor)[2] > g + 1:
                     costOfNode = 50 if world.wall_at(*neighbor) else 1
                     f = g + costOfNode + self.euclideanDist(neighbor,goal)
-                    q.put((neighbor,cords,g+1),f)
+                    q.put((neighbor,cords,g + costOfNode),f)
         
         # this only happens if no exit can be fond, queue runs out
         print('Could not reach goal')
@@ -567,3 +655,46 @@ class Clyde(CharacterEntity):
         self.initial_monster_count = num_monsters
         self.initial_dist_to_exit = len(self.a_star(world, (self.x , self.y), world.exitcell, True))
         
+    def random_non_wall(self, world):
+        x = int(random.random()*world.width())
+        y = int(random.random()*world.height())
+        if world.wall_at(x,y) or world.exit_at(x,y):
+            return self.random_non_wall(world)
+        return (x,y)
+
+    def debug_features(self, features):
+        debug("Features:")
+        debug(json.dumps({featureNames[i] : features[i] for i in range(len(features))}, indent=2, sort_keys=True))
+        debug("Average Features")
+        debug(json.dumps({featureNames[i] : self.avg_features[i] for i in range(len(self.avg_features))}, indent=2, sort_keys=True))
+  
+
+    # Helpers for reading from / saving weights to a file
+
+    def saveWeights(self, weights: list, fileName = "weights.json"):
+        featureDict = {}
+        with open(fileName, "w+") as file:
+            for index, weight in enumerate(weights):
+                featureDict[featureNames[index]] = weight
+            featureDict["trainingDuration"] = self.trainingDuration + 1 # save how long we have been training
+            featureDict["sum_features"] = self.sum_features
+            featureDict["num_samples"] = self.num_samples
+            json.dump(featureDict, file)
+            print("Weights saved to file successfully")
+    
+
+    def readWeights(self, fileName = "weights.json") -> list[float]:
+        weights = []
+        try:
+            with open(fileName) as file:
+                file_weights = json.load(file)
+                for key in featureNames:
+                    weights.append(file_weights[key])
+                self.trainingDuration = file_weights["trainingDuration"] # get how long we have been training
+                self.sum_features = file_weights["sum_features"]
+                self.num_samples = file_weights["num_samples"]
+                print(f"Weights successfully read: {weights}")
+            return weights
+        except:
+            self.trainingDuration = 0
+            return [1]*len(featureNames)

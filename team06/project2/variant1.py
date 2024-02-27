@@ -9,10 +9,10 @@ from game import Game
 
 # TODO This is your code!
 sys.path.insert(1, '../team06')
-from clydeML import Clyde
+from clydeML import ClydeML
 
 initial_seed = 200
-num_tries = 1000
+num_tries = 900
 wins = 0
 winning_seeds = []
 for i in range(num_tries):
@@ -21,13 +21,14 @@ for i in range(num_tries):
     g = Game.fromfile('map.txt')
 
     # TODO Add your character
-    g.add_character(Clyde("me", # name
+    g.add_character(ClydeML("me", # name
                                 "C",  # avatar
                                 0, 0  # position
     ))
     if g.go(1):
         wins += 1
         winning_seeds.append(initial_seed + i)
+    # input()
 
 print(f"Guy won {wins} times out of {num_tries} iterations, winning seeds were: {winning_seeds}")
 
