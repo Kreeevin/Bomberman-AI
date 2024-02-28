@@ -407,6 +407,8 @@ class ClydeML(Clyde):
                     # Punish moving in the wrong direction when theres a free path
                     rewards -= 15 if self.freePathToExit else 0
                 
+            rewards -= 2*len(aStarPath)
+            
             proportionWallsOnPath = numWallsOnPath/len(aStarPath)
 
             normalizedDistToExit = 1/(1+len(aStarPath))
@@ -482,7 +484,7 @@ class ClydeML(Clyde):
                     dangerBombs.append(bomb)
                     inBombPath = 1
                 
-                if bomb.timer == world.bomb_time:
+                if bomb.timer == world.bomb_time-1:
                     # Punish per bomb placement so its a bit more strategic with bomb placements
                     rewards -= 5
                 
@@ -559,7 +561,9 @@ class ClydeML(Clyde):
         
         
         # Cost of Living
-        rewards -= 10
+        rewards -= 5
+
+        debug(f"Rewards: {rewards}")
 
         features = [normalizedDistToExit, proportionWallsOnPath, self.freePathToExit, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
                 distToRandomMonster, distToAggressiveMonster, numMonsters, dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY,
