@@ -72,6 +72,7 @@ class ClydeML(CharacterEntity):
         self.avg_features = [0] * len(featureNames)
         self.num_samples = 0
         self.prevWeights = self.readWeights()
+        self.freePathToExit = False
 
     def do(self, world):
         # Commands
@@ -383,17 +384,17 @@ class ClydeML(CharacterEntity):
                 self.set_cell_color(*p, Fore.CYAN+Back.RED)
                 if world.wall_at(*p):
                     numWallsOnPath += 1
-            
-            freePathFactor = 10
-            if numWallsOnPath == 0:
-                print("FREE PATH TO EXIT - PLEASE FOR FUCKS SAKE PLEASE TAKE IT")
-                freePathFactor = 250
 
+            if len(aStarPath) >= 2:
+                
+                if me.nextpos() == aStarPath[0]:
+                    debug(f"bro followed a step of a* :D")
+                    # Reward moving in the right direction
+                    rewards += 5
+                
             proportionWallsOnPath = numWallsOnPath/len(aStarPath)
 
             normalizedDistToExit = 1/(1+len(aStarPath))
-
-            rewards += freePathFactor*(self.initial_dist_to_exit-len(aStarPath))**3
 
             exitcell_x = world.exitcell[0]
             exitcell_y = world.exitcell[1]
@@ -461,12 +462,10 @@ class ClydeML(CharacterEntity):
                 if me.x == bomb.x and abs(me.y - bomb.y) <= world.expl_range:
                     dangerBombs.append(bomb)
                     inBombPath = 1
-                    rewards -= 100
                 # if guy is same y coord as bomb and diff in x coord is <= range
                 if me.y == bomb.y and abs(me.x - bomb.x) <= world.expl_range:
                     dangerBombs.append(bomb)
                     inBombPath = 1
-                    rewards -= 100
                 
                 distToBomb = abs(me.x - bomb.x) + abs(me.y - bomb.y)
                 closestDist = -1
@@ -492,23 +491,27 @@ class ClydeML(CharacterEntity):
                 #if explosion:
                 if world.explosion_at((me.x + v[0]), (me.y + v[1])):
                     nextToExplosion = 1
-                    rewards -= 50
                     break
 
             # Normalize number of available moves by dividing by the max number
             numMovesAvailable = len(self.validMoves(world, me)) / 8
 
+            if numWallsOnPath == 0 and not self.freePathToExit:
+                print("FREE PATH TO EXIT - PLEASE FOR FUCKS SAKE PLEASE TAKE IT")
+                rewards += 250
+                self.freePathToExit = True
+
         # events: all binary
         for event in world.events:
             if event.tpe == Event.BOMB_HIT_CHARACTER:
                 bombHitChar = 1
-                rewards -= 10000
+                rewards -= 1000
             if event.tpe == Event.CHARACTER_KILLED_BY_MONSTER:
                 charKilledByMonster = 1
-                rewards -= 10000
+                rewards -= 1000
             if event.tpe == Event.CHARACTER_FOUND_EXIT:
                 charWins = 1
-                rewards += 10000
+                rewards += 1000
             if event.tpe == Event.BOMB_HIT_WALL:
                 bombHitWall = 1
                 rewards += 20
@@ -516,7 +519,12 @@ class ClydeML(CharacterEntity):
                 bombHitMonster = 1
                 rewards += 100
 
-        rewards -= self.turncount
+        
+        
+        # Cost of Living
+        rewards -= 1
+
+        # rewards = rewards * (np.math.dist((world., me.y), world.exitcell) - np.math.dist((me.x, me.y), world.exitcell)) #TODO: let me cook....
 
         features = [normalizedDistToExit, proportionWallsOnPath, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
                 distToRandomMonster, distToAggressiveMonster, numMonsters, dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY,

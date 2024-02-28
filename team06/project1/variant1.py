@@ -18,7 +18,7 @@ from interactivecharacter import InteractiveCharacter
 from clydeML import Clyde
 
 wins = 0
-num_tries = 500
+num_tries = 5
 initial_seed = 300
 winning_seeds = []
 for i in range(num_tries):
