@@ -82,6 +82,7 @@ class ClydeML(CharacterEntity):
             self.initialize_helper_variables(world)
             self.x, self.y = self.random_non_wall(world)
 
+
         # Neccessary so that entities don't repeat their previous move if timestep is
         # incremented before their next move is redefined
         for mList in world.monsters.values():
@@ -90,12 +91,18 @@ class ClydeML(CharacterEntity):
         me = world.me(self)
         me.move(0, 0)
         
-        # if not self.doneLearning:
-        action, weights = self.qLearning(world, self.prevWeights)
 
-        self.prevWeights = weights
+        if self.turncount >= 250:
+            self.place_bomb()
+            self.move(0,0)
+        else:
+            # if not self.doneLearning:
+            action, weights = self.qLearning(world, self.prevWeights)
+
+            self.prevWeights = weights
+            
+            self.performAction(world, action)
         
-        self.performAction(world, action)
 
         debug(f"New player postion: {self.nextpos()}\t Was bomb placement attempted: {self.maybe_place_bomb}")
 
@@ -120,8 +127,8 @@ class ClydeML(CharacterEntity):
         me = world.me(self)
         if me is None:
             return None
-        actions = self.validMoves(world, me) # (0,0) places bomb
-        actions.append((0,0))
+        actions = self.valid_non_death_moves(world, me) # (0,0) places bomb
+
         bestMove = None
 
         for dx, dy in actions:
@@ -191,31 +198,15 @@ class ClydeML(CharacterEntity):
            
     def qLearning(self, world, weights):
         # Get all legal actions
-        actions = self.validMoves(world, world.me(self)) # (0, 0) is place bomb
-        actions.append((0,0))
+        actions = self.valid_non_death_moves(world, world.me(self)) # (0, 0) is place bomb
 
         # Choose a curious move
         # action, _ = self.curiousMove(world, weights)
-
-
         if random.random() < (self.turncount+self.trainingDuration)/1000:
             action, _ = self.bestMove(world, weights)
             debug("PICKS BEST MOVE")
         else:
-            non_death_actions = []
-            for (dx,dy) in actions:
-                me = world.me(self)
-                if (dx, dy) == (0,0) and not self.canPlaceBomb(world, me):
-                    continue
-                if world.explosion_at(self.x+dx, self.y+dy):
-                    continue
-                inPath, bomb = self.in_bomb_path(world, me, (dx, dy))
-                if inPath and bomb is not None and bomb.timer < 2:
-                    continue
-                else: non_death_actions.append((dx, dy))
-            if non_death_actions == []:
-                non_death_actions.append((0,0))
-            action = random.choice(non_death_actions)
+            action = random.choice(actions)
             debug("PICKS RANDOM MOVE")
         # Perform random move
         self.performAction(world, action)
@@ -312,8 +303,8 @@ class ClydeML(CharacterEntity):
         for idx in range(len(weights)):
             weights[idx] += self.learningFactor*delta*features[idx]
             # Bind weights from -1000 to 1000 
-            # if math.fabs(weights[idx]) > 1000:
-            #     weights[idx] *= 1000/math.fabs(weights[idx])
+            if math.fabs(weights[idx]) > 1000:
+                weights[idx] *= 1000/math.fabs(weights[idx])
 
         return weights
 
@@ -676,7 +667,24 @@ class ClydeML(CharacterEntity):
         debug("Average Features")
         debug(json.dumps({featureNames[i] : self.avg_features[i] for i in range(len(self.avg_features))}, indent=2, sort_keys=True))
   
-
+    def valid_non_death_moves(self, world, entity):
+        actions = self.validMoves(world, entity)
+        actions.append((0,0))
+        non_death_actions = []
+        for (dx,dy) in actions:
+            me = world.me(self)
+            if (dx, dy) == (0,0) and not self.canPlaceBomb(world, me):
+                continue
+            if world.explosion_at(self.x+dx, self.y+dy):
+                continue
+            inPath, bomb = self.in_bomb_path(world, me, (dx, dy))
+            if inPath and bomb is not None and bomb.timer < 2:
+                continue
+            else: non_death_actions.append((dx, dy))
+        if non_death_actions == []:
+            non_death_actions.append((0,0))
+        return non_death_actions
+        
     # Helpers for reading from / saving weights to a file
 
     def saveWeights(self, weights: list, fileName = "weights.json"):
