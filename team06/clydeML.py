@@ -25,6 +25,7 @@ from clyde import Clyde
 
 featureNames = ["distToExit", # Already normalized, 1/(1+dist)
                 "proportionWallsOnPath", # Divide current number by length of path
+                "freePathToExit", # bool
                 "dirGoalNegX", # bool 0, 1 for direction
                 "dirGoalPosX", # bool 0, 1  for direction
                 "dirGoalNegY", # bool 0, 1 for direction
@@ -38,6 +39,7 @@ featureNames = ["distToExit", # Already normalized, 1/(1+dist)
                 "dirMonsterPosY", # bool 0, 1  for direction
                 "canPlaceBomb",  # bool
                 "inBombPath",  # bool
+                "wallInBombPath", # 0.25 per direction with bomb
                 "dirBombNegX", # bool 0, 1 for direction
                 "dirBombPosX", # bool 0, 1  for direction
                 "dirBombNegY", # bool 0, 1 for direction
@@ -60,7 +62,7 @@ def debug(str):
     if DEBUG:
         print(str)
 
-class ClydeML(CharacterEntity):
+class ClydeML(Clyde):
 
     def __init__(self, name, avatar, x, y, learningFactor = 0.5, futureDecay = 0.5):
         super().__init__(name, avatar, x, y)
@@ -92,9 +94,15 @@ class ClydeML(CharacterEntity):
         me.move(0, 0)
         
 
-        if self.turncount >= 250:
+        if self.turncount >= 250 and False:
             self.place_bomb()
             self.move(0,0)
+        elif self.freePathToExit:
+            # If free path to exit just fuckin go for it bestie
+            self.wavefront = self.make_wavefront(world, world.exitcell)
+            action, _ = self.expectimax(world, self.depth)
+            
+            self.performAction(world, action)
         else:
             # if not self.doneLearning:
             action, weights = self.qLearning(world, self.prevWeights)
@@ -348,7 +356,9 @@ class ClydeML(CharacterEntity):
         inBombPath              = 0 
         timeUntilBombExplodes   = 0 
         nextToExplosion         = 0 
-        canPlaceBomb            = 1 
+        canPlaceBomb            = 1
+
+        wallInBombPath          = 0
 
         dirBombNegX             = 0
         dirBombPosX             = 0
@@ -378,10 +388,24 @@ class ClydeML(CharacterEntity):
 
             if len(aStarPath) >= 2:
                 
-                if me.nextpos() == aStarPath[0]:
-                    debug(f"bro followed a step of a* :D")
+                if me.dx == me.x - aStarPath[0][0]:
+                    debug(f"bro followed a step of a* in the x-direction")
                     # Reward moving in the right direction
-                    rewards += 5
+                    rewards += 15 if self.freePathToExit else 5
+                elif -me.dx == me.x - aStarPath[0][0]:
+                    debug(f"bro followed a step opposite a* in the x-direction")
+                    # Punish moving in the wrong direction when theres a free path
+                    rewards -= 15 if self.freePathToExit else 0
+
+
+                if me.dy == me.y - aStarPath[0][1]:
+                    debug(f"bro followed a step of a* in the y-direction")
+                    # Reward moving in the right direction
+                    rewards += 15 if self.freePathToExit else 5
+                elif -me.dy == me.y - aStarPath[0][1]:
+                    debug(f"bro followed a step opposite a* in the y-direction")
+                    # Punish moving in the wrong direction when theres a free path
+                    rewards -= 15 if self.freePathToExit else 0
                 
             proportionWallsOnPath = numWallsOnPath/len(aStarPath)
 
@@ -458,12 +482,34 @@ class ClydeML(CharacterEntity):
                     dangerBombs.append(bomb)
                     inBombPath = 1
                 
+                if bomb.timer == world.bomb_time:
+                    # Punish per bomb placement so its a bit more strategic with bomb placements
+                    rewards -= 5
+                
+                # Use a funny little binary guy to use 4 booleans with 1 variable
+                wallInDirection = 0b0000
+                                #   SNWE
+                for i in range(world.expl_range):
+                    if bomb.x+i <  world.width() and world.wall_at(bomb.x+i, bomb.y) and wallInDirection&0b1:
+                        wallInBombPath += 1/4
+                        wallInDirection |= 0b1
+                    if bomb.x-i >= 0 and world.wall_at(bomb.x-i, bomb.y) and wallInDirection&0b10:
+                        wallInBombPath += 1/4
+                        wallInDirection |= 0b10
+                    if bomb.y+i <  world.height() and world.wall_at(bomb.x, bomb.y+i) and wallInDirection&0b100:
+                        wallInBombPath += 1/4
+                        wallInDirection |= 0b100
+                    if bomb.y-i >= 0 and world.wall_at(bomb.x, bomb.y-i) and wallInDirection&0b1000:
+                        wallInBombPath += 1/4
+                        wallInDirection |= 0b1000
+                
                 distToBomb = abs(me.x - bomb.x) + abs(me.y - bomb.y)
                 closestDist = -1
                 
                 if (distToBomb < closestDist) or closestDist == -1: 
                     closestDist = distToBomb
                     closestBomb = (bomb.x, bomb.y)
+
             if closestBomb is not None:
                 if closestBomb[0] - me.x > 0: dirBombPosX = 1
                 if closestBomb[0] - me.x < 0: dirBombNegX = 1
@@ -513,13 +559,11 @@ class ClydeML(CharacterEntity):
         
         
         # Cost of Living
-        rewards -= 1
+        rewards -= 10
 
-        # rewards = rewards * (np.math.dist((world., me.y), world.exitcell) - np.math.dist((me.x, me.y), world.exitcell)) #TODO: let me cook....
-
-        features = [normalizedDistToExit, proportionWallsOnPath, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
+        features = [normalizedDistToExit, proportionWallsOnPath, self.freePathToExit, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
                 distToRandomMonster, distToAggressiveMonster, numMonsters, dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY,
-                canPlaceBomb, inBombPath, dirBombNegX, dirBombPosX, dirBombNegY, dirBombPosY, timeUntilBombExplodes, nextToExplosion, numMovesAvailable, bombHitWall,
+                canPlaceBomb, inBombPath, wallInBombPath, dirBombNegX, dirBombPosX, dirBombNegY, dirBombPosY, timeUntilBombExplodes, nextToExplosion, numMovesAvailable, bombHitWall,
                 bombHitMonster, bombHitChar, charKilledByMonster, charWins]
         
         return features, rewards
