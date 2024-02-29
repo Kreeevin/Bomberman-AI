@@ -19,7 +19,7 @@ EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
                   (-1, 0),           (1, 0),
                   (-1, 1),  (0, 1),  (1, 1)]
 
-DEBUG = True
+DEBUG = False
 
 decay = 1
 
