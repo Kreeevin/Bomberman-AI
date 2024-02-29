@@ -235,17 +235,20 @@ class Clyde(CharacterEntity):
         for mList in world.monsters.values():
             # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
             for m in mList:
-                monsterDistToExit = self.wavefront[(m.x,m.y)]
-                if distToExit - monsterDistToExit >= 0 or abs(distToExit - monsterDistToExit) < 2:
-                    # Monster is closer to exit than us (or farther by less than depth moves)
-                    
-                    dist = len(self.a_star(world, (me.x, me.y), (m.x, m.y)))
-                    
-                    padding = 3
-                    if dist <= padding:
-                        monsterPenalty += 50*((padding+1) - dist)
-                    else:
-                        monsterPenalty += -dist/2
+                try:
+                    monsterDistToExit = self.wavefront[(m.x,m.y)]
+                    if distToExit - monsterDistToExit >= 0 or abs(distToExit - monsterDistToExit) < 2:
+                        # Monster is closer to exit than us (or farther by less than depth moves)
+                        
+                        dist = len(self.a_star(world, (me.x, me.y), (m.x, m.y)))
+                        
+                        padding = 3
+                        if dist <= padding:
+                            monsterPenalty += 50*((padding+1) - dist)
+                        else:
+                            monsterPenalty += -dist/2
+                except KeyError:
+                    debug("Monster trapped and so no wavefront can reach it")
 
         # if abs(eventReward - monsterPenalty - 2*distToExit - euclidDist - 23) < 0.5:     
         #     debug(f"utility = {eventReward + movementReward - monsterPenalty - 2*distToExit - euclidDist} || monsterpenalty = {monsterPenalty}  || distToExit = {distToExit} || playerPos = {(me.x, me.y)}")

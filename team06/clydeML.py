@@ -24,12 +24,12 @@ from clyde import Clyde
 
 
 featureNames = ["distToExit", # Already normalized, 1/(1+dist)
-                "proportionWallsOnPath", # Divide current number by length of path
+                "numTurnsLeft", # proportion of turns left in game
                 "freePathToExit", # bool
-                "dirGoalNegX", # bool 0, 1 for direction
-                "dirGoalPosX", # bool 0, 1  for direction
-                "dirGoalNegY", # bool 0, 1 for direction
-                "dirGoalPosY", # bool 0, 1  for direction
+                "dirGoalNegX", # NO LONGER BOOL
+                "dirGoalPosX", # NO LONGER BOOL
+                "dirGoalNegY", # NO LONGER BOOL
+                "dirGoalPosY", # NO LONGER BOOL
                 "distToRandomMonster", # 1 / (1+dist)^2
                 "distToAggressiveMonster", # 1/(1+dist)^2
                 "numMonsters", # int -- numMonsters / initial number of monsters
@@ -40,10 +40,10 @@ featureNames = ["distToExit", # Already normalized, 1/(1+dist)
                 "canPlaceBomb",  # bool
                 "inBombPath",  # bool
                 "wallInBombPath", # 0.25 per direction with bomb
-                "dirBombNegX", # bool 0, 1 for direction
-                "dirBombPosX", # bool 0, 1  for direction
-                "dirBombNegY", # bool 0, 1 for direction
-                "dirBombPosY", # bool 0, 1  for direction
+                "dirBombNegX", # GET RID OF
+                "dirBombPosX", # GET RID OF
+                "dirBombNegY", # GET RID OF
+                "dirBombPosY", # GET RID OF
                 "timeUntilBombExplodes", # time til explosion / total explosion time
                 "nextToExplosion",  # bool
                 "numMovesAvailable", # Just divide by 8 (don't count bomb as a move)
@@ -57,24 +57,26 @@ EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
 
 decay = 1
 
-DEBUG = True
+DEBUG = False
 def debug(str):
     if DEBUG:
         print(str)
 
 class ClydeML(Clyde):
 
-    def __init__(self, name, avatar, x, y, learningFactor = 0.5, futureDecay = 0.5):
+    def __init__(self, name, avatar, x, y, futureDecay = 0.5):
         super().__init__(name, avatar, x, y)
         self.turncount = 0
-        self.learningFactor = learningFactor
         self.futureDecay = futureDecay
         self.doneLearning = False
         self.sum_features = [0] * len(featureNames)
         self.avg_features = [0] * len(featureNames)
         self.num_samples = 0
         self.prevWeights = self.readWeights()
+        self.learningFactor = 1 - 0.5*self.trainingDuration/(0.5*self.trainingDuration+1)
         self.freePathToExit = False
+        self.maxGameLength = 1000
+        self.numberOfEpisodes = 300
 
     def do(self, world):
         # Commands
@@ -83,7 +85,6 @@ class ClydeML(Clyde):
             # Initialize helpful class variables like self.initial_monster_count or wavefront
             self.initialize_helper_variables(world)
             self.x, self.y = self.random_non_wall(world)
-
 
         # Neccessary so that entities don't repeat their previous move if timestep is
         # incremented before their next move is redefined
@@ -94,14 +95,20 @@ class ClydeML(Clyde):
         me.move(0, 0)
         
 
-        if self.turncount >= 250 and False:
+        if self.turncount >= self.maxGameLength:
             self.place_bomb()
             self.move(0,0)
         elif self.freePathToExit:
             # If free path to exit just fuckin go for it bestie
             self.wavefront = self.make_wavefront(world, world.exitcell)
             action, _ = self.expectimax(world, self.depth)
-            
+            sensedWorld, _ = world.next()
+
+            # Update weights like we do in qLearning
+            newFeatures, reward = self.featuresOfState(sensedWorld)
+            newWeights = self.updateWeights(sensedWorld, reward, newFeatures, self.prevWeights)
+            self.prevWeights = newWeights
+
             self.performAction(world, action)
         else:
             # if not self.doneLearning:
@@ -121,7 +128,8 @@ class ClydeML(Clyde):
         if (Event.BOMB_HIT_CHARACTER in theoreticalEvents or 
             Event.CHARACTER_KILLED_BY_MONSTER in theoreticalEvents or 
             Event.CHARACTER_FOUND_EXIT in theoreticalEvents or 
-            theoryland.explosion_at(*self.nextpos())):
+            theoryland.explosion_at(*self.nextpos()) or
+            world.exitcell == self.nextpos()):            
             self.saveWeights(self.prevWeights)
         
         self.turncount += 1
@@ -144,7 +152,7 @@ class ClydeML(Clyde):
             
             newWorld, _ = world.next()
             newFeatures, reward = self.featuresOfState(newWorld)
-            newUtility = self.evaluateStateUtility(newFeatures, weights) + reward
+            newUtility = self.evaluateStateUtility(newFeatures, weights)
             
             if bestMove is None or newUtility > bestMove[1]:
                 bestMove = ((dx,dy), newUtility)
@@ -177,7 +185,7 @@ class ClydeML(Clyde):
         if curiosityMove is None:
             print("Player has no valid move")
 
-        print(f"Choosing move {curiosityMove[0]}, which is {curiosityMove[1]} away from the average move")
+        # print(f"Choosing move {curiosityMove[0]}, which is {curiosityMove[1]} away from the average move")
 
         return curiosityMove
             
@@ -210,12 +218,13 @@ class ClydeML(Clyde):
 
         # Choose a curious move
         # action, _ = self.curiousMove(world, weights)
-        if random.random() < (self.turncount+self.trainingDuration)/1000:
+        epsilon = 1-(0.25*self.trainingDuration)/(0.25*self.trainingDuration+1)
+        if random.random() > epsilon:
             action, _ = self.bestMove(world, weights)
-            debug("PICKS BEST MOVE")
+            print(f"PICKS BEST MOVE:\tPROBABILITY IS {epsilon}")
         else:
             action = random.choice(actions)
-            debug("PICKS RANDOM MOVE")
+            print(f"PICKS RANDOM MOVE:\tPROBABILITY IS {epsilon}")
         # Perform random move
         self.performAction(world, action)
         # Increment time step
@@ -223,24 +232,6 @@ class ClydeML(Clyde):
         # Get features of new world
         newFeatures, reward = self.featuresOfState(sensedWorld)
         
-        # SKILL ISSUE: EXPECTIMAX DOESN'T LIKE WALLS
-
-        # if newFeatures[24] or newFeatures[25] or newFeatures[26]:
-        #     # If the curious move will cause the player to die,
-        #     # Find the optimal move according to expectimax instead
-        #     debug("RUNNING EXPECTIMAX TO TRY AND AVOID DYING")
-        #     newAction, _ = self.maxNode(world, 3)
-        #     if newAction is not None:
-        #         # Perform random move
-        #         self.performAction(world, newAction)
-        #         # Increment time step
-        #         sensedWorld, _ = world.next()
-        #         # Get features of new world
-        #         newFeatures, reward = self.featuresOfState(sensedWorld)
-
-        #         action = newAction
-
-        self.avg_features = self.rolling_average(newFeatures)
         # debug(f"Features: {newFeatures}")
         self.debug_features(newFeatures)
         # Check for features + rewards
@@ -305,7 +296,7 @@ class ClydeML(Clyde):
             
         delta = reward + self.futureDecay*nextTurnBestMoveUtility - currentStateVal
 
-        debug(f"\nDelta: {delta}, Reward: {reward}, nextTurnBestMove: {nextTurnBestMoveUtility}, CurrentStateVal: {currentStateVal}")
+        print(f"\nDelta: {delta}, Reward: {reward}, nextTurnBestMove: {nextTurnBestMoveUtility}, CurrentStateVal: {currentStateVal}")
         debug(f"Weights: {weights}\n")
         # Update weights according to learning factor& delta
         for idx in range(len(weights)):
@@ -337,7 +328,7 @@ class ClydeML(Clyde):
         rewards = 0
         
         normalizedDistToExit    = 0 
-        proportionWallsOnPath   = 0 
+        numTurnsLeft            = 0 
 
         dirGoalNegX             = 0
         dirGoalPosX             = 0
@@ -409,17 +400,17 @@ class ClydeML(Clyde):
                 
             rewards -= 2*len(aStarPath)
             
-            proportionWallsOnPath = numWallsOnPath/len(aStarPath)
 
             normalizedDistToExit = 1/(1+len(aStarPath))
 
             exitcell_x = world.exitcell[0]
             exitcell_y = world.exitcell[1]
 
-            if exitcell_x - me.x > 0: dirGoalPosX = 1
-            if exitcell_x - me.x < 0: dirGoalNegX = 1
-            if exitcell_y - me.y > 0: dirGoalPosY = 1
-            if exitcell_y - me.y < 0: dirGoalNegY = 1
+
+            dirGoalPosX = max(0, exitcell_x - me.x)
+            dirGoalNegX = max(0, me.x - exitcell_x)
+            dirGoalPosY = max(0, exitcell_y - me.y)
+            dirGoalNegY = max(0, me.y - exitcell_y)
 
             distClosest = 0
             for mList in world.monsters.values():
@@ -512,11 +503,11 @@ class ClydeML(Clyde):
                     closestDist = distToBomb
                     closestBomb = (bomb.x, bomb.y)
 
-            if closestBomb is not None:
-                if closestBomb[0] - me.x > 0: dirBombPosX = 1
-                if closestBomb[0] - me.x < 0: dirBombNegX = 1
-                if closestBomb[1] - me.y > 0: dirBombPosY = 1
-                if closestBomb[1] - me.y < 0: dirBombNegY = 1
+            # if closestBomb is not None:
+            #     if closestBomb[0] - me.x > 0: dirBombPosX = 1
+            #     if closestBomb[0] - me.x < 0: dirBombNegX = 1
+            #     if closestBomb[1] - me.y > 0: dirBombPosY = 1
+            #     if closestBomb[1] - me.y < 0: dirBombNegY = 1
                         
             # time til boom
             for danger in dangerBombs:
@@ -535,11 +526,16 @@ class ClydeML(Clyde):
             # Normalize number of available moves by dividing by the max number
             numMovesAvailable = len(self.validMoves(world, me)) / 8
 
-            if numWallsOnPath == 0 and not self.freePathToExit:
+            if numWallsOnPath == 0 and len(aStarPath) > 0 and not self.freePathToExit:
                 print("FREE PATH TO EXIT - PLEASE FOR FUCKS SAKE PLEASE TAKE IT")
+                print(f"A-Star Path is: {aStarPath}, length {len(aStarPath)}")
                 rewards += 250
                 self.freePathToExit = True
 
+        numTurnsLeft = 1 - self.turncount/self.maxGameLength
+        if abs(self.turncount - self.maxGameLength) < 2:
+            # Huge penalty for max length game
+            rewards += -2500 
         # events: all binary
         for event in world.events:
             if event.tpe == Event.BOMB_HIT_CHARACTER:
@@ -553,7 +549,7 @@ class ClydeML(Clyde):
                 rewards += 1000
             if event.tpe == Event.BOMB_HIT_WALL:
                 bombHitWall = 1
-                rewards += 20
+                rewards += 5
             if event.tpe == Event.BOMB_HIT_MONSTER:
                 bombHitMonster = 1
                 rewards += 100
@@ -565,7 +561,7 @@ class ClydeML(Clyde):
 
         debug(f"Rewards: {rewards}")
 
-        features = [normalizedDistToExit, proportionWallsOnPath, self.freePathToExit, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
+        features = [normalizedDistToExit, numTurnsLeft, self.freePathToExit, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
                 distToRandomMonster, distToAggressiveMonster, numMonsters, dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY,
                 canPlaceBomb, inBombPath, wallInBombPath, dirBombNegX, dirBombPosX, dirBombNegY, dirBombPosY, timeUntilBombExplodes, nextToExplosion, numMovesAvailable, bombHitWall,
                 bombHitMonster, bombHitChar, charKilledByMonster, charWins]
@@ -741,8 +737,8 @@ class ClydeML(Clyde):
             for index, weight in enumerate(weights):
                 featureDict[featureNames[index]] = weight
             featureDict["trainingDuration"] = self.trainingDuration + 1 # save how long we have been training
-            featureDict["sum_features"] = self.sum_features
-            featureDict["num_samples"] = self.num_samples
+            # featureDict["sum_features"] = self.sum_features
+            # featureDict["num_samples"] = self.num_samples
             json.dump(featureDict, file)
             print("Weights saved to file successfully")
     
@@ -755,8 +751,8 @@ class ClydeML(Clyde):
                 for key in featureNames:
                     weights.append(file_weights[key])
                 self.trainingDuration = file_weights["trainingDuration"] # get how long we have been training
-                self.sum_features = file_weights["sum_features"]
-                self.num_samples = file_weights["num_samples"]
+                # self.sum_features = file_weights["sum_features"]
+                # self.num_samples = file_weights["num_samples"]
                 print(f"Weights successfully read: {weights}")
             return weights
         except:

@@ -106,15 +106,19 @@ class Game:
         self.draw()
         step()
         win = False
+        displayEveryXFrames = 5
         while not self.done():
             (self.world, self.events) = self.world.next()
         
             for event in self.world.events:
                 if event.tpe == Event.CHARACTER_FOUND_EXIT:
                         win = True
-            
+            # if displayEveryXFrames == 0:
             self.display_gui()
             self.draw()
+            #     displayEveryXFrames = 20
+            # else:
+            #     displayEveryXFrames -= 1
             step()
             self.world.next_decisions()
         colorama.deinit()
