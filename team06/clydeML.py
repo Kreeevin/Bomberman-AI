@@ -192,8 +192,7 @@ class ClydeML(Clyde):
                 bomb = True
 
         self.move(dx, dy)
-        if bomb:
-            self.place_bomb()
+        self.maybe_place_bomb = bomb
             
         return True
     
