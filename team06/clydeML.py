@@ -37,16 +37,7 @@ featureNames = ["distToExit", # Already normalized, 1/(1+dist)
                 "dirMonsterPosX", # bool 0, 1  for direction
                 "dirMonsterNegY", # bool 0, 1 for direction
                 "dirMonsterPosY", # bool 0, 1  for direction
-                "canPlaceBomb",  # GET RID OF
-                "inBombPath",  # GET RID OF
                 "wallInBombPath", # 0.25 per direction with bomb
-                "dirBombNegX", # GET RID OF
-                "dirBombPosX", # GET RID OF
-                "dirBombNegY", # GET RID OF
-                "dirBombPosY", # GET RID OF
-                "timeUntilBombExplodes", # GET RID OF
-                "nextToExplosion",  # GET RID OF
-                "numMovesAvailable", # GET RID OF
                 "bombHitWall", "bombHitMonster", "bombHitChar", "charKilledByMonster", "charWins"] #Events -- all bools
 
 
@@ -105,7 +96,7 @@ class ClydeML(Clyde):
         if self.turncount >= self.maxGameLength:
             self.place_bomb()
             self.move(0,0)
-        elif self.freePathToExit or (closestMonster is not None and closestMonster < 5):
+        elif self.freePathToExit:# or (closestMonster is not None and closestMonster < 5):
             print(f"\t\t\tEXPECTIMAXING: Closest Monster {closestMonster} cells away!")
             # Should this case be a pure A* follow
             # If free path to exit just fuckin go for it bestie
@@ -164,7 +155,7 @@ class ClydeML(Clyde):
             newFeatures, reward = self.featuresOfState(newWorld)
             newUtility = self.evaluateStateUtility(newFeatures, weights)
             
-            if bestMove is None or newUtility > bestMove[1]:
+            if bestMove is None or newUtility+reward > bestMove[1]+bestMove[2]:
                 bestMove = ((dx,dy), newUtility, reward)
         
         if bestMove is None:
@@ -349,10 +340,10 @@ class ClydeML(Clyde):
         distToAggressiveMonster = 0
         numMonsters             = 0
 
-        dirMonsterNegX          = 0
-        dirMonsterPosX          = 0
-        dirMonsterNegY          = 0
-        dirMonsterPosY          = 0
+        dirMonsterNegX          = 1
+        dirMonsterPosX          = 1
+        dirMonsterNegY          = 1
+        dirMonsterPosY          = 1
 
         inBombPath              = 0 
         timeUntilBombExplodes   = 0 
@@ -417,46 +408,43 @@ class ClydeML(Clyde):
             exitcell_y = world.exitcell[1]
 
 
-            dirGoalPosX = max(0, exitcell_x - me.x)
-            dirGoalNegX = max(0, me.x - exitcell_x)
-            dirGoalPosY = max(0, exitcell_y - me.y)
-            dirGoalNegY = max(0, me.y - exitcell_y)
+            dirGoalPosX = max(0, exitcell_x - me.x)/world.width()
+            dirGoalNegX = max(0, me.x - exitcell_x)/world.width()
+            dirGoalPosY = max(0, exitcell_y - me.y)/world.height()
+            dirGoalNegY = max(0, me.y - exitcell_y)/world.height()
 
-            distClosest = 0
+            distClosest = None
             for mList in world.monsters.values():
                 # Secondary loop because of weird format of dictionaries (multiple monsters at same index?)
                 for monster in mList:
                     numMonsters += 1
                     dist = len(self.a_star(world, (me.x, me.y), (monster.x, monster.y), ignoreWalls=False))
+                    print(f"Dist to monster = {dist}")
                     if type(monster) == SelfPreservingMonster:
                         
                         if distToAggressiveMonster == 0 or dist < distToAggressiveMonster:
                             distToAggressiveMonster = dist
 
-                        if distClosest == 0 or dist < distClosest:
-
-                            if monster.x - me.x > 0: dirMonsterPosX = 1
-                            else: dirMonsterPosX = 0
-                            if monster.x - me.x < 0: dirMonsterNegX = 1
-                            else: dirMonsterNegX = 0
-                            if monster.y - me.y > 0: dirMonsterPosX = 1
-                            else: dirMonsterPosX = 0
-                            if monster.y - me.y < 0: dirMonsterNegX = 1
-                            else: dirMonsterNegX = 0
+                        if distClosest is None or dist < distClosest:
+                            distClosest = dist
+                            dirMonsterPosX = max(0, monster.x - me.x)/world.width()
+                            dirMonsterNegX = max(0, me.x - monster.x)/world.width()
+                            dirMonsterPosY = max(0, monster.y - me.y)/world.height()
+                            dirMonsterNegY = max(0, me.y - monster.y)/world.height()
                         
                     elif type(monster) == StupidMonster:
+                        print("in stupid monster if statement")
                         if distToRandomMonster == 0 or dist < distToRandomMonster:
-                                distToRandomMonster = dist
+                            print("set distance to random monster 1st time")
+                            distToRandomMonster = dist
                         
-                        if distClosest == 0 or dist < distClosest:
-                            if monster.x - me.x > 0: dirMonsterPosX = 1
-                            else: dirMonsterPosX = 0
-                            if monster.x - me.x < 0: dirMonsterNegX = 1
-                            else: dirMonsterNegX = 0
-                            if monster.y - me.y > 0: dirMonsterPosX = 1
-                            else: dirMonsterPosX = 0
-                            if monster.y - me.y < 0: dirMonsterNegX = 1
-                            else: dirMonsterNegX = 0
+                        if distClosest is None or dist < distClosest:
+                            print("set distance to random monster (we're in 😎)")
+                            distClosest = dist
+                            dirMonsterPosX = max(0, monster.x - me.x)/world.width()
+                            dirMonsterNegX = max(0, me.x - monster.x)/world.width()
+                            dirMonsterPosY = max(0, monster.y - me.y)/world.height()
+                            dirMonsterNegY = max(0, me.y - monster.y)/world.height()
 
             # Normalize Monster Features
             if self.initial_monster_count != 0:
@@ -546,6 +534,7 @@ class ClydeML(Clyde):
         if abs(self.turncount - self.maxGameLength) < 2:
             # Huge penalty for max length game
             rewards += -2500 
+            
         # events: all binary
         for event in world.events:
             if event.tpe == Event.BOMB_HIT_CHARACTER:
@@ -571,10 +560,11 @@ class ClydeML(Clyde):
 
         debug(f"Rewards: {rewards}")
 
-        features = [normalizedDistToExit, numTurnsLeft, self.freePathToExit, dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
-                distToRandomMonster, distToAggressiveMonster, numMonsters, dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY,
-                0, 0, wallInBombPath, 0, 0, 0, 0, 0, 0, 0, bombHitWall,
-                bombHitMonster, bombHitChar, charKilledByMonster, charWins]
+        features = [normalizedDistToExit, numTurnsLeft, self.freePathToExit, 
+                    dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
+                    distToRandomMonster, distToAggressiveMonster, numMonsters, 
+                    dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY, wallInBombPath, 
+                    bombHitWall, bombHitMonster, bombHitChar, charKilledByMonster, charWins]
         
         return features, rewards
 

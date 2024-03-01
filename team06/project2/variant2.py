@@ -13,7 +13,7 @@ sys.path.insert(1, '../team06')
 from clydeML import ClydeML
 
 initial_seed = 100
-num_tries = 50
+num_tries = 100
 wins = 0
 winning_seeds = []
 for i in range(num_tries):
