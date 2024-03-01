@@ -226,7 +226,7 @@ class Clyde(CharacterEntity):
 
                 except KeyError:
                     debug("Monster trapped and so no wavefront can reach it")
-                    dist = len(self.a_star(world, (me.x, me.y), (m.x, m.y), ignoreWalls=True))
+                    dist = self.euclidean_dist((me.x, me.y), (m.x, m.y))
                         
                     padding = 4
                     if dist <= padding:
