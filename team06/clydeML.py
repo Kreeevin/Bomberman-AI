@@ -26,17 +26,17 @@ from clyde import Clyde
 featureNames = ["distToExit", # Already normalized, 1/(1+dist)
                 "numTurnsLeft", # proportion of turns left in game
                 "freePathToExit", # bool
-                "dirGoalNegX", # NO LONGER BOOL
-                "dirGoalPosX", # NO LONGER BOOL
-                "dirGoalNegY", # NO LONGER BOOL
-                "dirGoalPosY", # NO LONGER BOOL
+                "dirGoalNegX", # me.x - exitcell_x / width
+                "dirGoalPosX", # me.x - exitcell_x / width
+                "dirGoalNegY", # me.y - exitcell_y / height
+                "dirGoalPosY", # me.y - exitcell_y / height
                 "distToRandomMonster", # 1 / (1+dist)^2
                 "distToAggressiveMonster", # 1/(1+dist)^2
                 "numMonsters", # int -- numMonsters / initial number of monsters
-                "dirMonsterNegX", # bool 0, 1 for direction
-                "dirMonsterPosX", # bool 0, 1  for direction
-                "dirMonsterNegY", # bool 0, 1 for direction
-                "dirMonsterPosY", # bool 0, 1  for direction
+                "dirMonsterNegX", # me.x - monster_x / width
+                "dirMonsterPosX", # me.x - monster_x / width
+                "dirMonsterNegY", # me.y - monster_y / height
+                "dirMonsterPosY", # me.y - monster_y / height
                 "wallInBombPath", # 0.25 per direction with bomb
                 "bombHitWall", "bombHitMonster", "bombHitChar", "charKilledByMonster", "charWins"] #Events -- all bools
 
@@ -88,7 +88,7 @@ class ClydeML(Clyde):
         for mList in world.monsters.values():
             for monster in mList:
                 monster.move(0,0)
-                dist = len(self.a_star(world, (me.x,me.y),monster.nextpos()))
+                dist = len(self.a_star(world, (me.x,me.y),monster.nextpos(), ignoreWalls=True))
                 if closestMonster is None or dist > closestMonster:
                     if dist != 0:
                         closestMonster = dist
@@ -98,7 +98,7 @@ class ClydeML(Clyde):
         if self.turncount >= self.maxGameLength:
             self.place_bomb()
             self.move(0,0)
-        elif self.freePathToExit or (closestMonster is not None and closestMonster < 5):
+        elif self.freePathToExit or (closestMonster is not None and closestMonster <= 5):
             print(f"\t\t\tEXPECTIMAXING: Closest Monster {closestMonster} cells away!")
             # Should this case be a pure A* follow
             # If free path to exit just fuckin go for it bestie

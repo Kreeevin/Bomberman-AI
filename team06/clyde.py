@@ -135,7 +135,6 @@ class Clyde(CharacterEntity):
                 
                 # Check what type of monster            
                 isRandom = True
-                
                 # if self preserving, check if next step is random
                 # if not random, perform next step
                 # if random monster or random step, perform chance node behavior
@@ -173,23 +172,6 @@ class Clyde(CharacterEntity):
                 validMoves.append((dx, dy))
 
         return validMoves
-
-    def isCellWalkable(self, world: World, pos: tuple[int, int]):
-        # init variables
-
-        width = world.width()
-        height = world.height()
-        x, y = pos
-
-        if x >= width or y >= height or x < 0 or y < 0:    # if cell is out of bounds 
-            return False                                                                    
-        
-        if world.wall_at(x, y):
-            return False
-        
-        return True
-
-
 
     def evaluateState(self, world: World, newEvents: list[Event]) -> int:
         # Use a* distance for distance to monster, use the walls to your advantage
@@ -241,8 +223,16 @@ class Clyde(CharacterEntity):
                             monsterPenalty += 50*((padding+1) - dist)
                         else:
                             monsterPenalty += -dist/2
+
                 except KeyError:
                     debug("Monster trapped and so no wavefront can reach it")
+                    dist = len(self.a_star(world, (me.x, me.y), (m.x, m.y), ignoreWalls=True))
+                        
+                    padding = 4
+                    if dist <= padding:
+                        monsterPenalty += 25*((padding+1) - dist)
+                    else:
+                        monsterPenalty += -dist/2
 
         # if abs(eventReward - monsterPenalty - 2*distToExit - euclidDist - 23) < 0.5:     
         #     debug(f"utility = {eventReward + movementReward - monsterPenalty - 2*distToExit - euclidDist} || monsterpenalty = {monsterPenalty}  || distToExit = {distToExit} || playerPos = {(me.x, me.y)}")
@@ -253,7 +243,7 @@ class Clyde(CharacterEntity):
         return eventReward + movementReward - monsterPenalty - 5*distToExit #- euclidDist
     
     
-    def neighbors_of_8(self, wrld, pos: tuple[int, int]):
+    def neighbors_of_8(self, wrld, pos: tuple[int, int], ignoreWalls: bool = False):
         # init neighbor array
         neighbors = []
 
@@ -263,10 +253,25 @@ class Clyde(CharacterEntity):
 
                 point = (pos[0] + x_offset, pos[1] + y_offset) # calculate the point to check
 
-                if self.isCellWalkable(wrld, point) and point != pos: 
+                if self.isCellWalkable(wrld, point, ignoreWalls) and point != pos: 
                     neighbors.append(point) #append to return list if walkable
 
         return neighbors
+
+    def isCellWalkable(self, world: World, pos: tuple[int, int], ignoreWalls = False):
+        # init variables
+
+        width = world.width()
+        height = world.height()
+        x, y = pos
+
+        if x >= width or y >= height or x < 0 or y < 0:    # if cell is out of bounds 
+            return False                                                                    
+        
+        if world.wall_at(x, y) and not ignoreWalls:
+            return False
+        
+        return True
  
 
     def neighbors_of_4(self, wrld,  pos: tuple[int, int]):
@@ -282,7 +287,7 @@ class Clyde(CharacterEntity):
             neighbors.append((pos[0], pos[1]+1))
         return neighbors
 
-    def a_star(self, wrld: World, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:
+    def a_star(self, world: World, start: tuple[int, int], goal: tuple[int, int], ignoreWalls:bool = False) -> list[tuple[int, int]]:
         """
         Calculates the Optimal path using the A* algorithm.
         Publishes the list of cells that were added to the original map.
@@ -294,10 +299,10 @@ class Clyde(CharacterEntity):
         # print("Executing A* from (%d,%d) to (%d,%d)" % (start[0], start[1], goal[0], goal[1]))
 
         # Check if start and goal are walkable
-        if(not self.isCellWalkable(wrld, start)):
+        if(not self.isCellWalkable(world, start)):
             print('start blocked')
             return []
-        elif(not self.isCellWalkable(wrld, goal)):
+        elif(not self.isCellWalkable(world, goal)):
             print('goal blocked')
             return []
 
@@ -306,7 +311,7 @@ class Clyde(CharacterEntity):
 
         # dictionary of all the explored points keyed by their coordinates tuple
         explored={} 
-        q.put((start,None,0),self.euclidean_dist(start,goal))
+        q.put((start,None,0),self.euclideanDist(start,goal))
 
         while not q.empty():
             element = q.get()
@@ -318,19 +323,19 @@ class Clyde(CharacterEntity):
                 # Once we've hit the goal, reconstruct the path and then return it
                 return self.reconstructPath(explored,start,goal)
             
-            neighbors=self.neighbors_of_8(wrld, cords)
+            neighbors=self.neighbors_of_8(world, cords, ignoreWalls)
             
             for i in range(len(neighbors)):
                 neighbor=neighbors[i]
                 if explored.get(neighbor) is None or explored.get(neighbor)[2] > g + 1:
-                    f = g + 1 + self.euclidean_dist(neighbor,goal)
-                    q.put((neighbor,cords,g+1),f)
+                    costOfNode = 50 if world.wall_at(*neighbor) else 1
+                    f = g + costOfNode + self.euclideanDist(neighbor,goal)
+                    q.put((neighbor,cords,g + costOfNode),f)
         
         # this only happens if no exit can be fond, queue runs out
         debug('Could not reach goal')
         
         return []
-
         
     def reconstructPath(self, explored: dict, start: tuple[int, int], goal: tuple[int, int]) -> list[tuple[int, int]]:   
         """
@@ -389,7 +394,7 @@ class Clyde(CharacterEntity):
     
     def valid_non_death_moves(self, world, entity):
         actions = self.validMoves(world, entity)
-        actions.append((0,0))
+        # actions.append((0,0))
         non_death_actions = []
         for (dx,dy) in actions:
             me = world.me(self)
