@@ -32,7 +32,7 @@ class Clyde(CharacterEntity):
     def __init__(self, name, avatar, x, y):
         super().__init__(name, avatar, x, y)
         self.turncount = 0
-        self.depth = 3
+        self.depth = 2
 
     def do(self, world):
         # Commands
@@ -89,7 +89,7 @@ class Clyde(CharacterEntity):
     def maxNode(self, world, depth):
         bestMove = []
         me = world.me(self)
-        validMoves = self.validMoves(world, me)
+        validMoves = self.valid_non_death_moves(world, me)
         # debug(f"Player Position: {me.x, me.y}, Valid Moves: {validMoves}")
         for (dx, dy) in validMoves:
             me.move(dx, dy)
@@ -134,13 +134,7 @@ class Clyde(CharacterEntity):
                 numMonsters += 1
                 
                 # Check what type of monster            
-                isRandom = False
-                
-                if type(monster) == SelfPreservingMonster:
-                    if monster.must_change_direction(world):
-                        isRandom = True
-                elif type(monster) == StupidMonster:
-                    isRandom = True
+                isRandom = True
                 
                 # if self preserving, check if next step is random
                 # if not random, perform next step
@@ -392,3 +386,23 @@ class Clyde(CharacterEntity):
 
     def euclidean_dist(self, a: tuple[int, int], b: tuple[int, int]):
         return ((a[0]-b[0])**2 + (a[1]-b[1])**2)**(1/2)
+    
+    def valid_non_death_moves(self, world, entity):
+        actions = self.validMoves(world, entity)
+        actions.append((0,0))
+        non_death_actions = []
+        for (dx,dy) in actions:
+            me = world.me(self)
+            if (dx, dy) == (0,0) and not self.canPlaceBomb(world, me):
+                continue
+            if world.explosion_at(self.x+dx, self.y+dy):
+                continue
+            if world.monsters_at(self.x+dx, self.y+dy):
+                continue
+            inPath, bomb = self.in_bomb_path(world, me, (dx, dy))
+            if inPath and bomb is not None and bomb.timer < 2:
+                continue
+            else: non_death_actions.append((dx, dy))
+        if non_death_actions == []:
+            non_death_actions.append((0,0))
+        return non_death_actions

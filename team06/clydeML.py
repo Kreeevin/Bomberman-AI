@@ -75,7 +75,9 @@ class ClydeML(Clyde):
         if self.turncount == 0:
             # Initialize helpful class variables like self.initial_monster_count or wavefront
             self.initialize_helper_variables(world)
-            # self.x, self.y = self.random_non_wall(world)
+            if self.trainingDuration < 150:
+                # Only start in a random spot for the first 150 episodes
+                self.x, self.y = self.random_non_wall(world)
 
         # Neccessary so that entities don't repeat their previous move if timestep is
         # incremented before their next move is redefined
@@ -96,7 +98,7 @@ class ClydeML(Clyde):
         if self.turncount >= self.maxGameLength:
             self.place_bomb()
             self.move(0,0)
-        elif self.freePathToExit:# or (closestMonster is not None and closestMonster < 5):
+        elif self.freePathToExit or (closestMonster is not None and closestMonster < 5):
             print(f"\t\t\tEXPECTIMAXING: Closest Monster {closestMonster} cells away!")
             # Should this case be a pure A* follow
             # If free path to exit just fuckin go for it bestie
@@ -120,17 +122,6 @@ class ClydeML(Clyde):
         
 
         debug(f"New player postion: {self.nextpos()}\t Was bomb placement attempted: {self.maybe_place_bomb}")
-
-        theoryland, theoreticalEvents = world.next()
-        theoreticalEvents = list(map(lambda e:e.tpe, theoreticalEvents))
-        debug(f"Theoretical Events: {theoreticalEvents}")
-        
-        if (Event.BOMB_HIT_CHARACTER in theoreticalEvents or 
-            Event.CHARACTER_KILLED_BY_MONSTER in theoreticalEvents or 
-            Event.CHARACTER_FOUND_EXIT in theoreticalEvents or 
-            theoryland.explosion_at(*self.nextpos()) or
-            world.exitcell == self.nextpos()):            
-            self.saveWeights(self.prevWeights)
         
         self.turncount += 1
             
@@ -219,7 +210,7 @@ class ClydeML(Clyde):
 
         # Choose a curious move
         # action, _ = self.curiousMove(world, weights)
-        epsilon = 1-(0.05*self.trainingDuration)/(0.05*self.trainingDuration+1)
+        epsilon = 1-(0.025*self.trainingDuration)/(0.025*self.trainingDuration+1)
         if random.random() > epsilon:
             action, _, _ = self.bestMove(world, weights)
             print(f"PICKS BEST MOVE:\tPROBABILITY IS {epsilon}\tLearning Factor: {self.learningFactor}")
@@ -419,8 +410,8 @@ class ClydeML(Clyde):
                 for monster in mList:
                     numMonsters += 1
                     dist = len(self.a_star(world, (me.x, me.y), (monster.x, monster.y), ignoreWalls=False))
-                    print(f"Dist to monster = {dist}")
-                    if type(monster) == SelfPreservingMonster:
+                    debug(f"Dist to monster = {dist}, Monster Type: {type(monster)}")
+                    if monster.name == "selfpreserving" or monster.name == "aggressive":
                         
                         if distToAggressiveMonster == 0 or dist < distToAggressiveMonster:
                             distToAggressiveMonster = dist
@@ -432,14 +423,11 @@ class ClydeML(Clyde):
                             dirMonsterPosY = max(0, monster.y - me.y)/world.height()
                             dirMonsterNegY = max(0, me.y - monster.y)/world.height()
                         
-                    elif type(monster) == StupidMonster:
-                        print("in stupid monster if statement")
+                    elif monster.name == "stupid":
                         if distToRandomMonster == 0 or dist < distToRandomMonster:
-                            print("set distance to random monster 1st time")
                             distToRandomMonster = dist
                         
                         if distClosest is None or dist < distClosest:
-                            print("set distance to random monster (we're in 😎)")
                             distClosest = dist
                             dirMonsterPosX = max(0, monster.x - me.x)/world.width()
                             dirMonsterNegX = max(0, me.x - monster.x)/world.width()
@@ -760,3 +748,7 @@ class ClydeML(Clyde):
         except:
             self.trainingDuration = 0
             return [1]*len(featureNames)
+        
+    def done(self, wrld):
+        print("GAME OVER: Saving the weights!")
+        self.saveWeights(self.prevWeights)
