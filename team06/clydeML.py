@@ -111,14 +111,14 @@ class ClydeML(Clyde):
             newWeights = self.updateWeights(sensedWorld, reward, newFeatures, self.prevWeights)
             self.prevWeights = newWeights
             if action is not None:
-                self.performAction(world, action)
+                self.performAction(world, action, self)
         else:
             # if not self.doneLearning:
             action, weights = self.qLearning(world, self.prevWeights)
 
             self.prevWeights = weights
             
-            self.performAction(world, action)
+            self.performAction(world, action, self)
         
 
         debug(f"New player postion: {self.nextpos()}\t Was bomb placement attempted: {self.maybe_place_bomb}")
@@ -143,8 +143,10 @@ class ClydeML(Clyde):
             self.performAction(world, (dx, dy))
             
             newWorld, _ = world.next()
+            print(f"theres a character in the new world at the new action point: {newWorld.characters_at(self.x, self.y)}")
             newFeatures, reward = self.featuresOfState(newWorld)
             newUtility = self.evaluateStateUtility(newFeatures, weights)
+            print(f"action: ({dx},{dy}) reward: {reward}, utility: {newUtility}")
             
             if bestMove is None or newUtility+reward > bestMove[1]+bestMove[2]:
                 bestMove = ((dx,dy), newUtility, reward)
@@ -181,8 +183,11 @@ class ClydeML(Clyde):
 
         return curiosityMove
             
-    def performAction(self, world : SensedWorld, action):
-        me = world.me(self)
+    def performAction(self, world : SensedWorld, action, entity = None):
+        if entity is None:
+            me = world.me(self)
+        else:
+            me = entity
         dx, dy = action
         bomb = False
         if (dx, dy) == (0,0):
@@ -191,8 +196,8 @@ class ClydeML(Clyde):
             else:
                 bomb = True
 
-        self.move(dx, dy)
-        self.maybe_place_bomb = bomb
+        me.move(dx, dy)
+        me.maybe_place_bomb = bomb
             
         return True
     
