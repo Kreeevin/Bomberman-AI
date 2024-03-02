@@ -21,7 +21,7 @@ EIGHT_MOVEMENT = [(-1,-1), (0, -1), (1, -1),
 
 DEBUG = False
 
-decay = 1
+decay = 0.9
 
 def debug(str):
     if DEBUG:
@@ -145,7 +145,7 @@ class Clyde(CharacterEntity):
                     for (dx, dy) in validMoves:
                         monster.move(dx, dy)
 
-                        _, partialUtility = decay * self.expectimax(world, depth-1)
+                        partialUtility = decay * self.expectimax(world, depth-1)[1]
 
                         utility += partialUtility / len(validMoves)
 
@@ -218,9 +218,11 @@ class Clyde(CharacterEntity):
                         
                         dist = len(self.a_star(world, (me.x, me.y), (m.x, m.y)))
                         
-                        padding = 3
+                        padding = 4
                         if dist <= padding:
                             monsterPenalty += 50*((padding+1) - dist)
+                            if me.dy < 0:
+                                monsterPenalty -= 15
                         else:
                             monsterPenalty += -dist/2
 
@@ -228,7 +230,7 @@ class Clyde(CharacterEntity):
                     debug("Monster trapped and so no wavefront can reach it")
                     dist = self.euclidean_dist((me.x, me.y), (m.x, m.y))
                         
-                    padding = 4
+                    padding = 5
                     if dist <= padding:
                         monsterPenalty += 25*((padding+1) - dist)
                     else:
@@ -238,7 +240,7 @@ class Clyde(CharacterEntity):
         #     debug(f"utility = {eventReward + movementReward - monsterPenalty - 2*distToExit - euclidDist} || monsterpenalty = {monsterPenalty}  || distToExit = {distToExit} || playerPos = {(me.x, me.y)}")
         #     pass
 
-        movementReward = len(self.validMoves(world, me))
+        movementReward = 2*len(self.validMoves(world, me))
 
         return eventReward + movementReward - monsterPenalty - 5*distToExit #- euclidDist
     

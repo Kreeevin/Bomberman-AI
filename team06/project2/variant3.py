@@ -14,7 +14,7 @@ from clydeML import ClydeML
 
 
 initial_seed = int(random.random()*500)
-num_tries = 300
+num_tries = 1
 wins = 0
 winning_seeds = []
 for i in range(num_tries):
@@ -30,7 +30,8 @@ for i in range(num_tries):
     
     g.add_character(ClydeML("me", # name
                                 "C",  # avatar
-                                0, 0  # position
+                                0, 0,  # position
+                                filename="variant1-3.json"
     ))
     if g.go(1):
         wins += 1

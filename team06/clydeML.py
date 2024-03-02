@@ -33,10 +33,14 @@ featureNames = ["distToExit", # Already normalized, 1/(1+dist)
                 "distToRandomMonster", # 1 / (1+dist)^2
                 "distToAggressiveMonster", # 1/(1+dist)^2
                 "numMonsters", # int -- numMonsters / initial number of monsters
-                "dirMonsterNegX", # me.x - monster_x / width
-                "dirMonsterPosX", # me.x - monster_x / width
-                "dirMonsterNegY", # me.y - monster_y / height
-                "dirMonsterPosY", # me.y - monster_y / height
+                "dirRandomNegX", # me.x - monster_x / width
+                "dirRandomPosX", # me.x - monster_x / width
+                "dirRandomNegY", # me.y - monster_y / height
+                "dirRandomPosY", # me.y - monster_y / height
+                "dirAggressiveNegX", # me.x - monster_x / width
+                "dirAggressivePosX", # me.x - monster_x / width
+                "dirAggressiveNegY", # me.y - monster_y / height
+                "dirAggressivePosY", # me.y - monster_y / height
                 "wallInBombPath", # 0.25 per direction with bomb
                 "bombHitWall", "bombHitMonster", "bombHitChar", "charKilledByMonster", "charWins"] #Events -- all bools
 
@@ -55,10 +59,11 @@ def debug(str):
 
 class ClydeML(Clyde):
 
-    def __init__(self, name, avatar, x, y, futureDecay = 0.9):
+    def __init__(self, name, avatar, x, y, futureDecay = 0.9, filename = "weights.json"):
         super().__init__(name, avatar, x, y)
         self.turncount = 0
         self.futureDecay = futureDecay
+        self.filename = filename
         self.doneLearning = False
         self.sum_features = [0] * len(featureNames)
         self.avg_features = [0] * len(featureNames)
@@ -88,14 +93,13 @@ class ClydeML(Clyde):
         for mList in world.monsters.values():
             for monster in mList:
                 monster.move(0,0)
-                dist = len(self.a_star(world, (me.x,me.y),monster.nextpos(), ignoreWalls=True))
-                if closestMonster is None or dist > closestMonster:
+                dist = len(self.a_star(world, (me.x,me.y), monster.nextpos(), ignoreWalls=True))
+                if closestMonster is None or dist < closestMonster:
                     if dist != 0:
                         closestMonster = dist
         
         
-
-        if self.turncount >= self.maxGameLength:
+        if self.turncount >= self.maxGameLength and False:
             self.place_bomb()
             self.move(0,0)
         elif self.freePathToExit or (closestMonster is not None and closestMonster <= 5):
@@ -143,10 +147,10 @@ class ClydeML(Clyde):
             self.performAction(world, (dx, dy))
             
             newWorld, _ = world.next()
-            print(f"theres a character in the new world at the new action point: {newWorld.characters_at(self.x, self.y)}")
+            # print(f"theres a character in the new world at the new action point: {newWorld.characters_at(self.x, self.y)}")
             newFeatures, reward = self.featuresOfState(newWorld)
             newUtility = self.evaluateStateUtility(newFeatures, weights)
-            print(f"action: ({dx},{dy}) reward: {reward}, utility: {newUtility}")
+            # print(f"action: ({dx},{dy}) reward: {reward}, utility: {newUtility}")
             
             if bestMove is None or newUtility+reward > bestMove[1]+bestMove[2]:
                 bestMove = ((dx,dy), newUtility, reward)
@@ -335,10 +339,15 @@ class ClydeML(Clyde):
         distToAggressiveMonster = 0
         numMonsters             = 0
 
-        dirMonsterNegX          = 1
-        dirMonsterPosX          = 1
-        dirMonsterNegY          = 1
-        dirMonsterPosY          = 1
+        dirRandomNegX          = 1
+        dirRandomPosX          = 1
+        dirRandomNegY          = 1
+        dirRandomPosY          = 1
+
+        dirAggressiveNegX          = 1
+        dirAggressivePosX          = 1
+        dirAggressiveNegY          = 1
+        dirAggressivePosY          = 1
 
         inBombPath              = 0 
         timeUntilBombExplodes   = 0 
@@ -422,10 +431,10 @@ class ClydeML(Clyde):
 
                         if distClosest is None or dist < distClosest:
                             distClosest = dist
-                            dirMonsterPosX = max(0, monster.x - me.x)/world.width()
-                            dirMonsterNegX = max(0, me.x - monster.x)/world.width()
-                            dirMonsterPosY = max(0, monster.y - me.y)/world.height()
-                            dirMonsterNegY = max(0, me.y - monster.y)/world.height()
+                            dirAggressivePosX = max(0, monster.x - me.x)/world.width()
+                            dirAggressiveNegX = max(0, me.x - monster.x)/world.width()
+                            dirAggressivePosY = max(0, monster.y - me.y)/world.height()
+                            dirAggressiveNegY = max(0, me.y - monster.y)/world.height()
                         
                     elif monster.name == "stupid":
                         if distToRandomMonster == 0 or dist < distToRandomMonster:
@@ -433,10 +442,10 @@ class ClydeML(Clyde):
                         
                         if distClosest is None or dist < distClosest:
                             distClosest = dist
-                            dirMonsterPosX = max(0, monster.x - me.x)/world.width()
-                            dirMonsterNegX = max(0, me.x - monster.x)/world.width()
-                            dirMonsterPosY = max(0, monster.y - me.y)/world.height()
-                            dirMonsterNegY = max(0, me.y - monster.y)/world.height()
+                            dirRandomPosX = max(0, monster.x - me.x)/world.width()
+                            dirRandomNegX = max(0, me.x - monster.x)/world.width()
+                            dirRandomPosY = max(0, monster.y - me.y)/world.height()
+                            dirRandomNegY = max(0, me.y - monster.y)/world.height()
 
             # Normalize Monster Features
             if self.initial_monster_count != 0:
@@ -540,7 +549,7 @@ class ClydeML(Clyde):
                 rewards += 1000
             if event.tpe == Event.BOMB_HIT_WALL:
                 bombHitWall = 1
-                rewards += 5
+                rewards += 20
             if event.tpe == Event.BOMB_HIT_MONSTER:
                 bombHitMonster = 1
                 rewards += 100
@@ -555,7 +564,9 @@ class ClydeML(Clyde):
         features = [normalizedDistToExit, numTurnsLeft, self.freePathToExit, 
                     dirGoalNegX, dirGoalPosX, dirGoalNegY, dirGoalPosY, 
                     distToRandomMonster, distToAggressiveMonster, numMonsters, 
-                    dirMonsterNegX, dirMonsterPosX, dirMonsterNegY, dirMonsterPosY, wallInBombPath, 
+                    dirRandomNegX, dirRandomPosX, dirRandomNegY, dirRandomPosY, 
+                    dirAggressiveNegX, dirAggressivePosX, dirAggressiveNegY, dirAggressivePosY, 
+                    wallInBombPath, 
                     bombHitWall, bombHitMonster, bombHitChar, charKilledByMonster, charWins]
         
         return features, rewards
@@ -725,7 +736,9 @@ class ClydeML(Clyde):
         
     # Helpers for reading from / saving weights to a file
 
-    def saveWeights(self, weights: list, fileName = "weights.json"):
+    def saveWeights(self, weights: list, fileName = None):
+        if fileName is None:
+            fileName = self.filename
         featureDict = {}
         with open(fileName, "w+") as file:
             for index, weight in enumerate(weights):
@@ -737,7 +750,9 @@ class ClydeML(Clyde):
             print("Weights saved to file successfully")
     
 
-    def readWeights(self, fileName = "weights.json") -> list[float]:
+    def readWeights(self, fileName = None) -> list[float]:
+        if fileName is None:
+            fileName = self.filename
         weights = []
         try:
             with open(fileName) as file:

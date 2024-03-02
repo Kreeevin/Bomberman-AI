@@ -13,7 +13,7 @@ sys.path.insert(1, '../team06')
 from clydeML import ClydeML
 
 initial_seed = 100
-num_tries = 100
+num_tries = 1
 wins = 0
 winning_seeds = []
 for i in range(num_tries):
@@ -28,7 +28,8 @@ for i in range(num_tries):
     
     g.add_character(ClydeML("me", # name
                                 "C",  # avatar
-                                0, 0  # position
+                                0, 0,  # position
+                                filename="variant1-3.json"
     ))
     if g.go(1):
         wins += 1
